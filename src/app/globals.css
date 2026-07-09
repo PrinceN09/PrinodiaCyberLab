@@ -1,0 +1,145 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: #161616;
+  color: #f4f4f4;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Carbon-style thin scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #4c4c4c transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #4c4c4c;
+  border-radius: 0;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Focus ring in IBM style */
+*:focus-visible {
+  outline: 2px solid #0f62fe;
+  outline-offset: -2px;
+}
+
+/* Markdown / prose rendering used across notes & reports */
+.prose-cyber {
+  color: #c6c6c6;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+.prose-cyber h1 {
+  color: #f4f4f4;
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.75rem;
+  letter-spacing: -0.01em;
+}
+.prose-cyber h2 {
+  color: #f4f4f4;
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
+}
+.prose-cyber h3 {
+  color: #f4f4f4;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.5rem;
+}
+.prose-cyber p {
+  margin: 0.75rem 0;
+}
+.prose-cyber ul,
+.prose-cyber ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+.prose-cyber ul {
+  list-style: disc;
+}
+.prose-cyber ol {
+  list-style: decimal;
+}
+.prose-cyber li {
+  margin: 0.25rem 0;
+}
+.prose-cyber a {
+  color: #78a9ff;
+  text-decoration: none;
+}
+.prose-cyber a:hover {
+  text-decoration: underline;
+}
+.prose-cyber blockquote {
+  border-left: 3px solid #0f62fe;
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: #8d8d8d;
+}
+.prose-cyber code {
+  font-family: var(--font-plex-mono), monospace;
+  background: #262626;
+  color: #f4f4f4;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.85em;
+}
+.prose-cyber pre {
+  background: #0d0d0d;
+  border: 1px solid #2e2e2e;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+.prose-cyber pre code {
+  background: transparent;
+  padding: 0;
+  color: #e0e0e0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.prose-cyber table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+}
+.prose-cyber th,
+.prose-cyber td {
+  border: 1px solid #2e2e2e;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.prose-cyber th {
+  background: #262626;
+  color: #f4f4f4;
+  font-weight: 600;
+}
+.prose-cyber strong {
+  color: #f4f4f4;
+  font-weight: 600;
+}
+.prose-cyber hr {
+  border: none;
+  border-top: 1px solid #2e2e2e;
+  margin: 1.5rem 0;
+}

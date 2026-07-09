@@ -1,0 +1,233 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Core
+// ─────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      String   @default("Security Analyst")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notes            Note[]
+  codeSnippets     CodeSnippet[]
+  diagrams         Diagram[]
+  projects         Project[]
+  reports          Report[]
+  learningProgress LearningProgress[]
+  resources        Resource[]
+  studyLogs        StudyLog[]
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  parentId  String?
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Folder[] @relation("FolderTree")
+  notes     Note[]
+  createdAt DateTime @default(now())
+}
+
+model Tag {
+  id       String        @id @default(cuid())
+  name     String        @unique
+  color    String        @default("blue")
+  notes    Note[]
+  snippets CodeSnippet[]
+  projects Project[]
+}
+
+// ─────────────────────────────────────────────
+// Knowledge base
+// ─────────────────────────────────────────────
+
+model Note {
+  id        String   @id @default(cuid())
+  title     String
+  content   String   @default("")
+  pinned    Boolean  @default(false)
+  folderId  String?
+  folder    Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  tags      Tag[]
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([folderId])
+}
+
+model CodeSnippet {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  language    String   @default("python")
+  code        String   @default("")
+  tags        Tag[]
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Diagram {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  mermaidCode String   @default("")
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// Operations
+// ─────────────────────────────────────────────
+
+enum ProjectCategory {
+  SOC_ANALYST
+  SIEM
+  THREAT_DETECTION
+  INCIDENT_RESPONSE
+  VULNERABILITY_MANAGEMENT
+  GRC
+  PENETRATION_TESTING
+  LINUX_NETWORKING
+  CLOUD_SECURITY
+}
+
+enum ProjectStatus {
+  PLANNED
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+}
+
+model Project {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  category    ProjectCategory @default(SOC_ANALYST)
+  status      ProjectStatus   @default(PLANNED)
+  progress    Int             @default(0)
+  dueDate     DateTime?
+  tags        Tag[]
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+enum ReportType {
+  INCIDENT_RESPONSE
+  VULNERABILITY
+  GRC
+  THREAT_INTEL
+}
+
+enum ReportSeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFORMATIONAL
+}
+
+enum ReportStatus {
+  DRAFT
+  IN_REVIEW
+  FINAL
+}
+
+model Report {
+  id        String          @id @default(cuid())
+  title     String
+  type      ReportType      @default(INCIDENT_RESPONSE)
+  severity  ReportSeverity  @default(MEDIUM)
+  status    ReportStatus    @default(DRAFT)
+  reference String?
+  content   String          @default("")
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// Learning
+// ─────────────────────────────────────────────
+
+enum ModuleStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model LearningProgress {
+  id         String       @id @default(cuid())
+  track      String
+  module     String
+  status     ModuleStatus @default(NOT_STARTED)
+  progress   Int          @default(0)
+  hoursSpent Float        @default(0)
+  order      Int          @default(0)
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([track])
+}
+
+enum ResourceType {
+  COURSE
+  CERTIFICATION
+  BOOK
+  VIDEO
+  LAB
+  TOOL
+  ARTICLE
+}
+
+enum ResourceStatus {
+  TO_START
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Resource {
+  id        String         @id @default(cuid())
+  title     String
+  url       String?
+  type      ResourceType   @default(COURSE)
+  provider  String?
+  status    ResourceStatus @default(TO_START)
+  notes     String?
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model StudyLog {
+  id      String   @id @default(cuid())
+  date    DateTime
+  minutes Int
+  topic   String?
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([date])
+}

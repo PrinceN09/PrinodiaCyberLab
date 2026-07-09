@@ -79,6 +79,9 @@ async function main() {
     data: [
       {
         title: "MITRE ATT&CK — Initial Access Techniques",
+        category: "Threat Intelligence",
+        description:
+          "Reference of TA0001 initial-access techniques with detection focus.",
         pinned: true,
         folderId: socFolder.id,
         userId: user.id,
@@ -100,6 +103,8 @@ outbound connections immediately following inbound access.
       },
       {
         title: "Windows Event IDs Every Analyst Should Know",
+        category: "SOC Operations",
+        description: "The critical Windows security event IDs for triage.",
         folderId: socFolder.id,
         userId: user.id,
         content: `# Critical Windows Security Event IDs
@@ -120,6 +125,8 @@ success is a classic password-spray signature.`,
       },
       {
         title: "Incident Response Lifecycle (NIST 800-61)",
+        category: "Incident Response",
+        description: "The four NIST 800-61 IR phases and containment factors.",
         pinned: true,
         folderId: irFolder.id,
         userId: user.id,
@@ -137,6 +144,8 @@ resources needed, effectiveness (partial vs full).`,
       },
       {
         title: "Nmap Cheatsheet",
+        category: "Networking",
+        description: "Quick reference of common Nmap scan commands.",
         folderId: netFolder.id,
         userId: user.id,
         content: `# Nmap Quick Reference
@@ -152,6 +161,8 @@ Always get written authorization before scanning anything you don't own.`,
       },
       {
         title: "Linux Privilege Escalation Checklist",
+        category: "Penetration Testing",
+        description: "First moves for enumerating Linux privilege escalation.",
         folderId: netFolder.id,
         userId: user.id,
         content: `# Linux PrivEsc — First Moves

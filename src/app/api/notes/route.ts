@@ -13,11 +13,25 @@ export async function GET() {
 export async function POST(req: Request) {
   const body = await req.json();
   const user = await getCurrentUser();
+
+  const tagNames: string[] = Array.isArray(body.tags) ? body.tags : [];
+
   const note = await prisma.note.create({
     data: {
       title: body.title ?? "Untitled note",
+      category: body.category ?? null,
+      description: body.description ?? null,
       content: body.content ?? "",
+      folderId: body.folderId || null,
       userId: user.id,
+      ...(tagNames.length > 0 && {
+        tags: {
+          connectOrCreate: tagNames.map((name) => ({
+            where: { name },
+            create: { name },
+          })),
+        },
+      }),
     },
     include: { folder: true, tags: true },
   });

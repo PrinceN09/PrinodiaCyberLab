@@ -11,17 +11,50 @@ Blue accents, sharp cards, and precise typography.
 
 ---
 
-## Features (v1 — working)
+## Theme
 
-- **Dashboard** — learning-track progress, weekly study activity, and live counts of notes, snippets, projects, and reports.
-- **Notes / Wiki** — Markdown notes with a split-pane live-preview editor, folders, and tags.
-- **Code Workspace** — Monaco-powered snippet editor with syntax highlighting for Python, Bash, SQL, YAML, PowerShell, and more.
-- **Diagrams** — Mermaid.js editor with live rendering for flowcharts, sequence diagrams, and kill-chains.
-- **Cyber Projects** — a board across nine disciplines: SOC Analyst, SIEM, Threat Detection, Incident Response, Vulnerability Management, GRC, Penetration Testing, Linux & Networking, Cloud Security.
-- **Reports** — templated editors for Incident Response, Vulnerability, GRC, and Threat Intel reports, with severity and status tracking.
-- **Learning Progress** — module-by-module tracking with study-time charts.
-- **Resources** — a library of courses, certs, books, labs, and tools.
-- **Settings** — profile, notifications, appearance, and workspace data.
+Light and dark modes, both built on IBM Carbon design tokens (Gray 100 dark /
+White light) driven entirely by CSS custom properties. Dark is the default; your
+choice is persisted per-device and applied before first paint (no flash). Toggle
+from the top bar or **Settings → Theme**.
+
+## Navigation
+
+A collapsible, nested sidebar groups the workspace into **Dashboard**,
+**Learning**, **Cyber Operations**, **Career Center**, **Progress**, and
+**Settings**. Sections expand/collapse, the active page is highlighted, and the
+active section stays open as you navigate.
+
+## Features
+
+**Learning**
+- **Notes / Wiki** — three-pane layout (list · Markdown editor · live preview), editable titles, autosave, search, tags, folders, pinned & recent notes, version-history entry point.
+- **Code Workspace** — Monaco editor (theme-aware) for Python, Bash, PowerShell, SQL, JS/TS, YAML, JSON, Markdown, and more.
+- **Diagram Studio** — Mermaid.js with live, theme-aware rendering for flowcharts, sequence diagrams, and attack paths.
+- **Course Library** — track structured courses (e.g. 10Alytics) by module and lesson, with notes linkable to lessons.
+- **Study Sessions** — log focused sessions with duration, focus area, and course link.
+- **Flashcards** — active-recall study mode with decks and confidence rating.
+- **Resources** — courses, certs, books, labs, and tools.
+
+**Cyber Operations**
+- **Cyber Projects** — board across nine disciplines (SOC, SIEM, Threat Detection, IR, Vuln Mgmt, GRC, Pentest, Linux & Networking, Cloud).
+- **Incident / Vulnerability / GRC Reports** — templated editors with severity and status.
+- **SIEM Rules** — detection-engineering library mapped to MITRE ATT&CK.
+- **Threat Hunting** — hypothesis-driven hunts with status and findings.
+- **IOC Library** — searchable catalog of indicators of compromise.
+
+**Career Center**
+- **Resume Builder** — role-targeted, export-ready resumes (print/PDF), multiple resumes.
+- **LinkedIn Optimization** — headline/about/skills/featured editor with an optimization checklist.
+- **Cover Letters** — per-application drafts with live preview.
+- **Job Tracker** — Kanban board (Saved → Applied → Interview → Offer → Rejected) built for hiring.cafe.
+- **Interview Preparation** — personal question bank with confidence ratings.
+- **Portfolio** — showcase labs, detections, and write-ups.
+
+**Progress**
+- **Learning Progress**, **Study Hours** (schedule adherence + streaks), **Goals**, **Weekly Review**.
+
+**Dashboard** — stat cards, current learning track, weekly study + streak, active projects, recent applications, upcoming interviews, and recent notes.
 
 ---
 
@@ -67,12 +100,14 @@ rm -rf node_modules package-lock.json
 npm install
 ```
 
-### 2. Configure the database connection
+### 2. Configure the database connection & auth secret
 
-Open **`.env`** and set `DATABASE_URL` to your local PostgreSQL user/password:
+Open **`.env`** and set `DATABASE_URL` to your local PostgreSQL user/password,
+and set a long random `AUTH_SECRET` used to sign session cookies:
 
 ```env
 DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/prinodia_cyberlab?schema=public"
+AUTH_SECRET="a-long-random-string"
 ```
 
 > The `prinodia_cyberlab` database must already exist. Create it if needed:
@@ -85,6 +120,12 @@ npx prisma generate
 npx prisma migrate dev --name init
 ```
 
+> The schema was significantly expanded (Career Center, Courses, Study Sessions,
+> Flashcards, SIEM Rules, Threat Hunts, IOCs, and more). If you already ran an
+> earlier version, this simply creates a new migration — run the same command and
+> give it a name like `expanded_modules` when prompted. `prisma generate` is also
+> required after pulling schema changes so the client picks up the new models.
+
 ### 4. Seed realistic cybersecurity data
 
 ```bash
@@ -94,7 +135,22 @@ npm run db:seed
 Loads sample notes (MITRE ATT&CK, Windows event IDs, NIST IR lifecycle), code
 snippets (Splunk detections, Sigma rules, triage scripts), diagrams (SOC triage
 flow, kill chain), eight projects, three reports, a SOC Analyst learning track,
-resources, and a week of study logs.
+resources, and a week of study logs — plus the demo user account.
+
+The seed prints your sign-in credentials at the end:
+
+```
+Email:    princentunka09@gmail.com
+Password: CyberLab2026!
+```
+
+## Authentication
+
+The app is gated behind a sign-in screen (`/login`). Sessions are signed JWTs
+stored in an httpOnly cookie; passwords are hashed with bcrypt. Middleware
+redirects unauthenticated requests to `/login` and signed-in users away from the
+auth pages. Sign out from the button in the sidebar footer. Change the demo
+password after your first sign-in.
 
 ### 5. Run the app
 
@@ -121,8 +177,8 @@ Open **http://localhost:3000**.
 
 ## Files you may need to edit manually
 
-1. **`.env`** — set your real `DATABASE_URL`. This is the **only** file that
-   must be edited before the app will run.
+1. **`.env`** — set your real `DATABASE_URL` and a random `AUTH_SECRET`. This is
+   the **only** file that must be edited before the app will run.
 
 Everything else works out of the box.
 

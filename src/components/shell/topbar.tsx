@@ -1,6 +1,7 @@
 "use client";
 
 import { Search, Bell, Command, ShieldCheck } from "lucide-react";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 export function Topbar() {
   return (
@@ -24,6 +25,7 @@ export function Topbar() {
             Lab environment · secure
           </span>
         </div>
+        <ThemeToggle />
         <button
           className="flex h-9 w-9 items-center justify-center text-cds-text-secondary transition-colors hover:bg-cds-layer hover:text-cds-text"
           aria-label="Notifications"

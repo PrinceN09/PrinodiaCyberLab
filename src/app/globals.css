@@ -2,8 +2,86 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* ─────────────────────────────────────────────────────────────
+   Prinodia CyberLab — design tokens
+   Values are space-separated RGB channels (for Tailwind alpha).
+   Dark is the default (:root). Light overrides via [data-theme].
+   Inspired by IBM Carbon (Gray 100 dark / White light).
+   ───────────────────────────────────────────────────────────── */
+
+:root,
+[data-theme="dark"] {
   color-scheme: dark;
+
+  --cds-bg: 22 22 22; /* #161616 */
+  --cds-layer: 31 31 31; /* #1f1f1f */
+  --cds-layer-accent: 38 38 38; /* #262626 */
+  --cds-field: 38 38 38;
+  --cds-hover: 44 44 44; /* #2c2c2c */
+  --cds-selected: 51 51 51; /* #333333 */
+
+  --cds-border: 57 57 57; /* #393939 */
+  --cds-border-subtle: 38 38 38; /* #262626 */
+  --cds-border-strong: 111 111 111; /* #6f6f6f */
+
+  --cds-text: 244 244 244; /* #f4f4f4 */
+  --cds-text-secondary: 198 198 198; /* #c6c6c6 */
+  --cds-helper: 141 141 141; /* #8d8d8d */
+  --cds-disabled: 111 111 111;
+
+  --cds-blue: 15 98 254; /* #0f62fe */
+  --cds-blue-hover: 3 83 233; /* #0353e9 */
+  --cds-blue-active: 0 45 156; /* #002d9c */
+  --cds-link: 120 169 255; /* #78a9ff */
+  --cds-link-hover: 166 200 255; /* #a6c8ff */
+
+  --cds-green: 66 190 101; /* #42be65 */
+  --cds-yellow: 241 194 27; /* #f1c21b */
+  --cds-red: 250 77 86; /* #fa4d56 */
+  --cds-orange: 255 131 43; /* #ff832b */
+  --cds-purple: 190 149 255; /* #be95ff */
+  --cds-cyan: 51 177 255; /* #33b1ff */
+  --cds-teal: 8 189 186; /* #08bdba */
+  --cds-magenta: 255 126 182; /* #ff7eb6 */
+
+  --cds-code-bg: 13 13 13;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --cds-bg: 255 255 255; /* #ffffff */
+  --cds-layer: 244 244 244; /* #f4f4f4 */
+  --cds-layer-accent: 232 232 232; /* #e8e8e8 */
+  --cds-field: 244 244 244;
+  --cds-hover: 229 229 229; /* #e5e5e5 */
+  --cds-selected: 224 224 224; /* #e0e0e0 */
+
+  --cds-border: 224 224 224; /* #e0e0e0 */
+  --cds-border-subtle: 224 224 224;
+  --cds-border-strong: 141 141 141; /* #8d8d8d */
+
+  --cds-text: 22 22 22; /* #161616 */
+  --cds-text-secondary: 82 82 82; /* #525252 */
+  --cds-helper: 111 111 111; /* #6f6f6f */
+  --cds-disabled: 168 168 168; /* #a8a8a8 */
+
+  --cds-blue: 15 98 254; /* #0f62fe */
+  --cds-blue-hover: 3 83 233;
+  --cds-blue-active: 0 45 156;
+  --cds-link: 15 98 254; /* #0f62fe */
+  --cds-link-hover: 0 67 206; /* #0043ce */
+
+  --cds-green: 36 161 72; /* #24a148 */
+  --cds-yellow: 176 128 6; /* #b08006 (contrast on light) */
+  --cds-red: 218 30 40; /* #da1e28 */
+  --cds-orange: 186 78 0; /* #ba4e00 */
+  --cds-purple: 138 63 252; /* #8a3ffc */
+  --cds-cyan: 0 114 195; /* #0072c3 */
+  --cds-teal: 0 125 121; /* #007d79 */
+  --cds-magenta: 208 38 112; /* #d02670 */
+
+  --cds-code-bg: 244 244 244;
 }
 
 html,
@@ -12,56 +90,79 @@ body {
 }
 
 body {
-  background-color: #161616;
-  color: #f4f4f4;
+  background-color: rgb(var(--cds-bg));
+  color: rgb(var(--cds-text));
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Carbon-style thin scrollbars */
+/* Thin Carbon-style scrollbars */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #4c4c4c transparent;
+  scrollbar-color: rgb(var(--cds-border-strong)) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #4c4c4c;
-  border-radius: 0;
+  background: rgb(var(--cds-border-strong) / 0.6);
 }
 *::-webkit-scrollbar-track {
   background: transparent;
 }
 
-/* Focus ring in IBM style */
 *:focus-visible {
-  outline: 2px solid #0f62fe;
+  outline: 2px solid rgb(var(--cds-blue));
   outline-offset: -2px;
 }
 
-/* Markdown / prose rendering used across notes & reports */
+/* Loading skeleton shimmer */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgb(var(--cds-layer-accent));
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(var(--cds-hover) / 0.6),
+    transparent
+  );
+  animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ─── Markdown / prose (notes & reports) ─── */
 .prose-cyber {
-  color: #c6c6c6;
+  color: rgb(var(--cds-text-secondary));
   font-size: 0.9375rem;
   line-height: 1.6;
 }
 .prose-cyber h1 {
-  color: #f4f4f4;
+  color: rgb(var(--cds-text));
   font-size: 1.5rem;
   font-weight: 600;
   margin: 1.5rem 0 0.75rem;
   letter-spacing: -0.01em;
 }
 .prose-cyber h2 {
-  color: #f4f4f4;
+  color: rgb(var(--cds-text));
   font-size: 1.15rem;
   font-weight: 600;
   margin: 1.5rem 0 0.5rem;
 }
 .prose-cyber h3 {
-  color: #f4f4f4;
+  color: rgb(var(--cds-text));
   font-size: 1rem;
   font-weight: 600;
   margin: 1.25rem 0 0.5rem;
@@ -84,28 +185,28 @@ body {
   margin: 0.25rem 0;
 }
 .prose-cyber a {
-  color: #78a9ff;
+  color: rgb(var(--cds-link));
   text-decoration: none;
 }
 .prose-cyber a:hover {
   text-decoration: underline;
 }
 .prose-cyber blockquote {
-  border-left: 3px solid #0f62fe;
+  border-left: 3px solid rgb(var(--cds-blue));
   padding-left: 1rem;
   margin: 1rem 0;
-  color: #8d8d8d;
+  color: rgb(var(--cds-helper));
 }
 .prose-cyber code {
   font-family: var(--font-plex-mono), monospace;
-  background: #262626;
-  color: #f4f4f4;
+  background: rgb(var(--cds-layer-accent));
+  color: rgb(var(--cds-text));
   padding: 0.1rem 0.35rem;
   font-size: 0.85em;
 }
 .prose-cyber pre {
-  background: #0d0d0d;
-  border: 1px solid #2e2e2e;
+  background: rgb(var(--cds-code-bg));
+  border: 1px solid rgb(var(--cds-border));
   padding: 1rem;
   overflow-x: auto;
   margin: 1rem 0;
@@ -113,7 +214,7 @@ body {
 .prose-cyber pre code {
   background: transparent;
   padding: 0;
-  color: #e0e0e0;
+  color: rgb(var(--cds-text));
   font-size: 0.85rem;
   line-height: 1.5;
 }
@@ -125,21 +226,21 @@ body {
 }
 .prose-cyber th,
 .prose-cyber td {
-  border: 1px solid #2e2e2e;
+  border: 1px solid rgb(var(--cds-border));
   padding: 0.5rem 0.75rem;
   text-align: left;
 }
 .prose-cyber th {
-  background: #262626;
-  color: #f4f4f4;
+  background: rgb(var(--cds-layer-accent));
+  color: rgb(var(--cds-text));
   font-weight: 600;
 }
 .prose-cyber strong {
-  color: #f4f4f4;
+  color: rgb(var(--cds-text));
   font-weight: 600;
 }
 .prose-cyber hr {
   border: none;
-  border-top: 1px solid #2e2e2e;
+  border-top: 1px solid rgb(var(--cds-border));
   margin: 1.5rem 0;
 }

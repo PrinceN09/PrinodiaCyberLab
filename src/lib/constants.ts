@@ -1,3 +1,24 @@
+export const APP_VERSION = "0.2.0";
+
+export const CYBER_TIPS = [
+  "Enable phishing-resistant MFA everywhere — it stops the majority of account takeovers.",
+  "Map every alert to a MITRE ATT&CK technique; it standardizes triage across the team.",
+  "Least privilege isn't a setting, it's a habit. Review access quarterly.",
+  "Patch internet-facing systems first — that's where attackers look before anywhere else.",
+  "A password manager plus unique passwords beats any 'clever' memorable scheme.",
+  "Log everything you can, but alert only on what you'll actually investigate.",
+  "Back up offline. Ransomware can't encrypt what it can't reach.",
+  "Before you scan it, make sure you're authorized to scan it — in writing.",
+  "Assume breach. Design detection as if prevention already failed.",
+  "The fastest way to shrink your attack surface is to decommission what you don't use.",
+];
+
+export function tipOfTheDay(date = new Date()) {
+  const start = new Date(date.getFullYear(), 0, 0);
+  const day = Math.floor((+date - +start) / 864e5);
+  return CYBER_TIPS[day % CYBER_TIPS.length];
+}
+
 export const PROJECT_CATEGORIES = [
   { value: "SOC_ANALYST", label: "SOC Analyst" },
   { value: "SIEM", label: "SIEM" },
@@ -22,6 +43,8 @@ export const REPORT_TYPES = [
   { value: "VULNERABILITY", label: "Vulnerability" },
   { value: "GRC", label: "GRC" },
   { value: "THREAT_INTEL", label: "Threat Intel" },
+  { value: "RISK_ASSESSMENT", label: "Risk Assessment" },
+  { value: "SECURITY_ASSESSMENT", label: "Security Assessment" },
 ] as const;
 
 export const REPORT_SEVERITY = [

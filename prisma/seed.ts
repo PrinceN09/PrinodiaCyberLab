@@ -1,19 +1,37 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
+
+// Default demo credentials — change the password after first sign-in.
+const DEMO_PASSWORD = "CyberLab2026!";
 
 async function main() {
   console.log("Seeding Prinodia CyberLab…");
 
   // Clean slate (order matters for relations)
+  await prisma.studySession.deleteMany();
+  await prisma.studyGoal.deleteMany();
+  await prisma.flashcard.deleteMany();
+  await prisma.interviewPrep.deleteMany();
+  await prisma.portfolioItem.deleteMany();
+  await prisma.coverLetter.deleteMany();
+  await prisma.resume.deleteMany();
+  await prisma.linkedInProfile.deleteMany();
+  await prisma.jobApplication.deleteMany();
+  await prisma.siemRule.deleteMany();
+  await prisma.threatHunt.deleteMany();
+  await prisma.ioc.deleteMany();
   await prisma.studyLog.deleteMany();
   await prisma.learningProgress.deleteMany();
   await prisma.resource.deleteMany();
   await prisma.report.deleteMany();
   await prisma.project.deleteMany();
   await prisma.diagram.deleteMany();
-  await prisma.codeSnippet.deleteMany();
   await prisma.note.deleteMany();
+  await prisma.lesson.deleteMany();
+  await prisma.courseModule.deleteMany();
+  await prisma.course.deleteMany();
   await prisma.folder.deleteMany();
   await prisma.tag.deleteMany();
   await prisma.user.deleteMany();
@@ -24,6 +42,7 @@ async function main() {
       name: "Prince Ntunka",
       email: "princentunka09@gmail.com",
       role: "SOC Analyst (in training)",
+      password: await bcrypt.hash(DEMO_PASSWORD, 10),
     },
   });
 
@@ -554,7 +573,244 @@ Assign control owners and schedule a follow-up assessment in 60 days.`,
     });
   }
 
+  // ── Course Library (10Alytics) ────────────────
+  const course = await prisma.course.create({
+    data: {
+      title: "10Alytics Cybersecurity Program",
+      provider: "10Alytics",
+      description:
+        "End-to-end cybersecurity program covering security fundamentals, SOC operations, cloud security, and GRC.",
+      progress: 48,
+      status: "IN_PROGRESS",
+      userId: user.id,
+      modules: {
+        create: [
+          {
+            title: "Module 1 — Security Fundamentals",
+            order: 0,
+            lessons: {
+              create: [
+                { title: "CIA Triad & Security Principles", order: 0, status: "COMPLETED" },
+                { title: "Networking for Security", order: 1, status: "COMPLETED" },
+                { title: "Cryptography Basics", order: 2, status: "COMPLETED" },
+              ],
+            },
+          },
+          {
+            title: "Module 2 — Security Operations",
+            order: 1,
+            lessons: {
+              create: [
+                { title: "SOC Roles & Workflows", order: 0, status: "COMPLETED" },
+                { title: "SIEM & Log Analysis", order: 1, status: "IN_PROGRESS" },
+                { title: "Threat Intelligence", order: 2, status: "NOT_STARTED" },
+              ],
+            },
+          },
+          {
+            title: "Module 3 — Cloud & GRC",
+            order: 2,
+            lessons: {
+              create: [
+                { title: "Cloud Security Foundations", order: 0, status: "NOT_STARTED" },
+                { title: "Governance, Risk & Compliance", order: 1, status: "NOT_STARTED" },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    include: { modules: { include: { lessons: true } } },
+  });
+
+  // ── Study Sessions (rich) ─────────────────────
+  const sessionTopics: [string, string, number][] = [
+    ["SIEM & Log Analysis", "10Alytics — Module 2", 120],
+    ["Nmap enumeration lab", "TryHackMe", 75],
+    ["Wireshark PCAP exercise", "malware-traffic-analysis", 90],
+    ["Splunk SPL practice", "10Alytics — Module 2", 60],
+    ["Incident response playbooks", "Blue Team Handbook", 45],
+    ["Linux privilege escalation", "TryHackMe", 105],
+  ];
+  for (let i = 0; i < sessionTopics.length; i++) {
+    const [topic, focus, minutes] = sessionTopics[i];
+    await prisma.studySession.create({
+      data: {
+        date: new Date(now.getTime() - i * 864e5),
+        minutes,
+        topic,
+        focus,
+        courseId: focus.includes("10Alytics") ? course.id : null,
+        userId: user.id,
+      },
+    });
+  }
+
+  // ── Study Goals ───────────────────────────────
+  await prisma.studyGoal.createMany({
+    data: [
+      { title: "Weekly study hours", type: "WEEKLY_HOURS", target: 15, current: 8.25, unit: "hours", userId: user.id },
+      { title: "Weekday sessions (Mon–Fri, 2.5h)", type: "DAILY_HOURS", target: 2.5, current: 2, unit: "hours/day", userId: user.id },
+      { title: "Weekend sessions (Sat–Sun, 4h)", type: "DAILY_HOURS", target: 4, current: 3, unit: "hours/day", userId: user.id },
+      { title: "Complete SOC Level 1 modules", type: "MODULES", target: 6, current: 1, unit: "modules", userId: user.id },
+    ],
+  });
+
+  // ── Flashcards ────────────────────────────────
+  await prisma.flashcard.createMany({
+    data: [
+      { deck: "MITRE ATT&CK", front: "What tactic is T1566?", back: "Phishing (Initial Access).", confidence: 3, userId: user.id },
+      { deck: "Windows Logs", front: "Event ID for successful logon?", back: "4624", confidence: 4, userId: user.id },
+      { deck: "Windows Logs", front: "Event ID for a cleared audit log?", back: "1102", confidence: 2, userId: user.id },
+      { deck: "Networking", front: "Default port for RDP?", back: "TCP 3389", confidence: 5, userId: user.id },
+      { deck: "Incident Response", front: "Name the NIST 800-61 phases.", back: "Preparation; Detection & Analysis; Containment, Eradication & Recovery; Post-Incident Activity.", confidence: 3, userId: user.id },
+      { deck: "Cryptography", front: "Symmetric vs asymmetric — key difference?", back: "Symmetric uses one shared key; asymmetric uses a public/private key pair.", confidence: 4, userId: user.id },
+    ],
+  });
+
+  // ── Resume ────────────────────────────────────
+  await prisma.resume.create({
+    data: {
+      title: "SOC Analyst — Primary Resume",
+      targetRole: "SOC Analyst",
+      userId: user.id,
+      content: {
+        fullName: "Prince Ntunka",
+        title: "SOC Analyst",
+        email: "princentunka09@gmail.com",
+        location: "Remote",
+        summary:
+          "Aspiring SOC Analyst with hands-on experience in SIEM log analysis, threat detection, and incident response. Skilled with Splunk, Wireshark, and the MITRE ATT&CK framework through home-lab and TryHackMe projects.",
+        skills: ["Splunk", "SIEM", "MITRE ATT&CK", "Wireshark", "Nmap", "Incident Response", "Linux", "Python"],
+        experience: [
+          {
+            role: "Cybersecurity Trainee",
+            org: "10Alytics Program",
+            period: "2025 – Present",
+            bullets: [
+              "Built a home SOC lab with Wazuh + Elastic and analyzed simulated alerts.",
+              "Authored Splunk correlation searches mapped to MITRE ATT&CK techniques.",
+            ],
+          },
+        ],
+        education: [
+          { school: "Self-directed / 10Alytics", detail: "Cybersecurity Program", period: "2025" },
+        ],
+        certifications: ["CompTIA Security+ (in progress)"],
+      },
+    },
+  });
+
+  // ── Cover Letter ──────────────────────────────
+  await prisma.coverLetter.create({
+    data: {
+      title: "SOC Analyst — General",
+      company: "Target Company",
+      role: "SOC Analyst",
+      userId: user.id,
+      content: `Dear Hiring Manager,
+
+I am writing to express my interest in the SOC Analyst position. Through hands-on
+labs and the 10Alytics cybersecurity program, I have developed practical skills in
+SIEM log analysis, threat detection, and incident response.
+
+In my home lab I deployed a full SIEM stack, authored detection rules mapped to
+MITRE ATT&CK, and documented incident investigations end to end. I am eager to bring
+this analytical rigor and continuous-learning mindset to your security operations team.
+
+Thank you for your consideration.
+
+Sincerely,
+Prince Ntunka`,
+    },
+  });
+
+  // ── LinkedIn Profile ──────────────────────────
+  await prisma.linkedInProfile.create({
+    data: {
+      userId: user.id,
+      headline: "Aspiring SOC Analyst | SIEM • Threat Detection • Incident Response | Splunk & MITRE ATT&CK",
+      about:
+        "Cybersecurity practitioner focused on security operations. I build detection content, analyze logs, and document investigations. Currently completing the 10Alytics cybersecurity program and preparing for CompTIA Security+.",
+      skills: ["Splunk", "SIEM", "Threat Detection", "Incident Response", "MITRE ATT&CK", "Wireshark", "Linux", "Python"],
+      certifications: ["CompTIA Security+ (in progress)"],
+      featured: "Home SOC Lab project; Splunk detection engineering write-ups.",
+      checklist: {
+        photo: true,
+        banner: false,
+        headline: true,
+        about: true,
+        featured: false,
+        skills: true,
+        certifications: true,
+        openToWork: true,
+      },
+    },
+  });
+
+  // ── Job Applications ──────────────────────────
+  await prisma.jobApplication.createMany({
+    data: [
+      { company: "CrowdStrike", jobTitle: "SOC Analyst I", location: "Remote (US)", salary: "$70k–$85k", url: "https://hiring.cafe/", status: "APPLIED", appliedDate: inDays(-4), userId: user.id, notes: "Referred via LinkedIn connection." },
+      { company: "Arctic Wolf", jobTitle: "Security Analyst (Triage)", location: "Remote", salary: "$65k–$80k", url: "https://hiring.cafe/", status: "INTERVIEW", appliedDate: inDays(-9), interviewDate: inDays(3), userId: user.id, notes: "Phone screen went well; technical round scheduled." },
+      { company: "Palo Alto Networks", jobTitle: "Associate SOC Analyst", location: "Hybrid — Austin, TX", salary: "$78k", url: "https://hiring.cafe/", status: "SAVED", userId: user.id },
+      { company: "Deloitte", jobTitle: "Cyber GRC Analyst", location: "Remote", salary: "$72k–$90k", url: "https://hiring.cafe/", status: "APPLIED", appliedDate: inDays(-2), userId: user.id },
+      { company: "Rapid7", jobTitle: "MDR Security Analyst", location: "Remote", salary: "$68k", url: "https://hiring.cafe/", status: "REJECTED", appliedDate: inDays(-20), userId: user.id, notes: "Wanted 1+ yr SOC experience." },
+    ],
+  });
+
+  // ── Interview Preparation ─────────────────────
+  await prisma.interviewPrep.createMany({
+    data: [
+      { category: "Behavioral", question: "Tell me about yourself.", answer: "Concise pitch: background, why cybersecurity, hands-on lab work, and the role you're targeting.", confidence: 3, userId: user.id },
+      { category: "SOC", question: "Walk me through how you would triage a phishing alert.", answer: "Validate the alert, examine headers/URLs, detonate safely, check for clicks/credential entry, scope impact, contain, and document.", confidence: 4, userId: user.id },
+      { category: "SOC", question: "What is the difference between a true positive and a false positive?", answer: "A true positive is a correctly identified malicious event; a false positive is benign activity flagged as malicious.", confidence: 5, userId: user.id },
+      { category: "Networking", question: "Explain the TCP three-way handshake.", answer: "SYN → SYN/ACK → ACK establishes a reliable connection before data transfer.", confidence: 4, userId: user.id },
+      { category: "Incident Response", question: "What are the phases of the NIST IR lifecycle?", answer: "Preparation; Detection & Analysis; Containment, Eradication & Recovery; Post-Incident Activity.", confidence: 3, userId: user.id },
+    ],
+  });
+
+  // ── Portfolio ─────────────────────────────────
+  await prisma.portfolioItem.createMany({
+    data: [
+      { title: "Home SOC Lab (Wazuh + Elastic)", description: "Virtualized network with full SIEM stack, Sysmon telemetry, and simulated attacks.", category: "Lab", tech: ["Wazuh", "Elastic", "Sysmon"], featured: true, repoUrl: "https://github.com/", userId: user.id },
+      { title: "Splunk Detection Engineering", description: "Ten correlation searches mapped to MITRE ATT&CK with tuning notes.", category: "Detection", tech: ["Splunk", "SPL", "MITRE ATT&CK"], featured: true, userId: user.id },
+      { title: "PCAP Analysis Write-ups", description: "Wireshark investigations of malicious traffic samples.", category: "Writeup", tech: ["Wireshark"], userId: user.id },
+    ],
+  });
+
+  // ── SIEM Rules ────────────────────────────────
+  await prisma.siemRule.createMany({
+    data: [
+      { title: "Password Spray Detection", platform: "Splunk", description: "Many failed logons across distinct accounts from one source.", query: "index=windows EventCode=4625 | bin _time span=5m | stats dc(Account_Name) as users count as attempts by src_ip | where users>10 AND attempts>25", mitre: "T1110.003", severity: "HIGH", userId: user.id },
+      { title: "Suspicious PowerShell EncodedCommand", platform: "Sigma", description: "Base64-encoded PowerShell execution.", query: "Image|endswith: '\\\\powershell.exe'\\nCommandLine|contains: '-enc'", mitre: "T1059.001", severity: "HIGH", userId: user.id },
+      { title: "Impossible Travel Sign-in", platform: "Microsoft Sentinel", description: "Successful sign-ins from geographically distant locations in a short window.", query: "SigninLogs | evaluate ... impossible travel", mitre: "T1078", severity: "MEDIUM", userId: user.id },
+      { title: "New Service Installed", platform: "Splunk", description: "Detects service creation often used for persistence.", query: "index=windows EventCode=7045", mitre: "T1543.003", severity: "MEDIUM", userId: user.id },
+    ],
+  });
+
+  // ── Threat Hunts ──────────────────────────────
+  await prisma.threatHunt.createMany({
+    data: [
+      { title: "Living-off-the-land binaries (LOLBins)", hypothesis: "Adversaries may abuse signed Windows binaries (certutil, mshta) to download payloads.", dataSource: "EDR process telemetry", mitre: "T1105", status: "ACTIVE", findings: "Baseline established; 2 benign certutil uses identified.", userId: user.id },
+      { title: "Anomalous outbound DNS", hypothesis: "DNS tunneling could exfiltrate data via unusually long TXT queries.", dataSource: "DNS logs", mitre: "T1048.003", status: "PROPOSED", userId: user.id },
+      { title: "Scheduled task persistence", hypothesis: "Malicious scheduled tasks created outside change windows.", dataSource: "Event ID 4698", mitre: "T1053.005", status: "COMPLETED", findings: "No malicious tasks found; documented normal baseline.", userId: user.id },
+    ],
+  });
+
+  // ── IOCs ──────────────────────────────────────
+  await prisma.ioc.createMany({
+    data: [
+      { type: "IP", value: "45.148.10.14", threatType: "C2", source: "Incident IR-2026-014", confidence: "High", notes: "Sign-in source in phishing incident.", userId: user.id },
+      { type: "DOMAIN", value: "micros0ft-login.com", threatType: "Phishing", source: "Email gateway", confidence: "High", userId: user.id },
+      { type: "FILE_HASH", value: "e3b0c44298fc1c149afbf4c8996fb924...", threatType: "Malware", source: "VirusTotal", confidence: "Medium", userId: user.id },
+      { type: "URL", value: "http://malicious.example/payload.ps1", threatType: "Dropper", source: "Sandbox", confidence: "Medium", userId: user.id },
+      { type: "EMAIL", value: "invoice@paymentsecure-support.com", threatType: "BEC", source: "User report", confidence: "Low", userId: user.id },
+    ],
+  });
+
   console.log("Seed complete ✔");
+  console.log(`\nSign in with:\n  Email:    ${user.email}\n  Password: ${DEMO_PASSWORD}\n`);
 }
 
 main()

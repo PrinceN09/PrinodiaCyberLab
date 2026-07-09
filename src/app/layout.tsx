@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/shell/sidebar";
-import { Topbar } from "@/components/shell/topbar";
+import { ThemeProvider, themeScript } from "@/components/theme/theme-provider";
 
 const plexSans = IBM_Plex_Sans({
   subsets: ["latin"],
@@ -19,9 +18,13 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Prinodia CyberLab",
+  title: {
+    default: "Prinodia CyberLab",
+    template: "%s · Prinodia CyberLab",
+  },
   description:
     "A professional cybersecurity learning workspace for notes, code, diagrams, labs, and reports.",
+  applicationName: "Prinodia CyberLab",
 };
 
 export default function RootLayout({
@@ -30,15 +33,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
+    <html
+      lang="en"
+      data-theme="dark"
+      className={`${plexSans.variable} ${plexMono.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="font-sans">
-        <div className="flex h-screen overflow-hidden bg-cds-bg">
-          <Sidebar />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <Topbar />
-            <main className="flex-1 overflow-y-auto">{children}</main>
-          </div>
-        </div>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

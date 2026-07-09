@@ -1,9 +1,16 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Prinodia CyberLab — design tokens inspired by the IBM Carbon Design System
- * (Gray 100 dark theme). Sharp corners, precise spacing, restrained color.
+ * Prinodia CyberLab design system.
+ *
+ * Colors are driven entirely by CSS custom properties (see globals.css),
+ * stored as space-separated RGB channels so Tailwind opacity modifiers
+ * (e.g. `bg-cds-blue/10`) work. Themes are switched by the `data-theme`
+ * attribute on <html>. NO hard-coded colors should appear in components —
+ * always reference these `cds-*` tokens.
  */
+const token = (name: string) => `rgb(var(--cds-${name}) / <alpha-value>)`;
+
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
@@ -11,36 +18,37 @@ const config: Config = {
       colors: {
         cds: {
           // Layers
-          bg: "#161616",
-          layer: "#1f1f1f",
-          "layer-accent": "#262626",
-          field: "#262626",
-          hover: "#2c2c2c",
-          selected: "#333333",
+          bg: token("bg"),
+          "code-bg": token("code-bg"),
+          layer: token("layer"),
+          "layer-accent": token("layer-accent"),
+          field: token("field"),
+          hover: token("hover"),
+          selected: token("selected"),
           // Borders
-          border: "#2e2e2e",
-          "border-subtle": "#262626",
-          "border-strong": "#6f6f6f",
+          border: token("border"),
+          "border-subtle": token("border-subtle"),
+          "border-strong": token("border-strong"),
           // Text
-          text: "#f4f4f4",
-          "text-secondary": "#c6c6c6",
-          helper: "#8d8d8d",
-          disabled: "#6f6f6f",
+          text: token("text"),
+          "text-secondary": token("text-secondary"),
+          helper: token("helper"),
+          disabled: token("disabled"),
           // Interactive (IBM Blue)
-          blue: "#0f62fe",
-          "blue-hover": "#0353e9",
-          "blue-active": "#002d9c",
-          link: "#78a9ff",
-          "link-hover": "#a6c8ff",
+          blue: token("blue"),
+          "blue-hover": token("blue-hover"),
+          "blue-active": token("blue-active"),
+          link: token("link"),
+          "link-hover": token("link-hover"),
           // Support
-          green: "#42be65",
-          yellow: "#f1c21b",
-          red: "#fa4d56",
-          orange: "#ff832b",
-          purple: "#be95ff",
-          cyan: "#33b1ff",
-          teal: "#08bdba",
-          magenta: "#ff7eb6",
+          green: token("green"),
+          yellow: token("yellow"),
+          red: token("red"),
+          orange: token("orange"),
+          purple: token("purple"),
+          cyan: token("cyan"),
+          teal: token("teal"),
+          magenta: token("magenta"),
         },
       },
       fontFamily: {
@@ -56,6 +64,18 @@ const config: Config = {
       },
       maxWidth: {
         "8xl": "96rem",
+      },
+      keyframes: {
+        "fade-in": {
+          "0%": { opacity: "0", transform: "translateY(2px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        shimmer: {
+          "100%": { transform: "translateX(100%)" },
+        },
+      },
+      animation: {
+        "fade-in": "fade-in 0.15s ease-out",
       },
     },
   },

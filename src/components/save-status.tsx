@@ -4,6 +4,7 @@ import { Check, CircleDot, Loader2, AlertTriangle } from "lucide-react";
 import type { AutoSaveEntry } from "@/hooks/use-autosave";
 import { formatTime } from "@/lib/utils";
 
+/** Auto-save indicator: Unsaved → Saving… → Saved at HH:MM / Retry. */
 export function SaveStatus({
   entry,
   onRetry,

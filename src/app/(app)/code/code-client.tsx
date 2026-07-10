@@ -1,213 +1,294 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Plus, Save, Code2, Copy, Check } from "lucide-react";
+import { Copy, Check, Trash2, Code2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SaveStatus } from "@/components/save-status";
 import { useTheme } from "@/components/theme/theme-provider";
-import { cn, relativeTime } from "@/lib/utils";
+import { useAutoSave } from "@/hooks/use-autosave";
+import {
+  apiFetch,
+  CODE_CATEGORY_META,
+  DIFFICULTY_LABELS,
+  LANGUAGES,
+  languageMeta,
+  NEW_SNIPPET_TEMPLATES,
+  type CodeFolder,
+  type Snippet,
+} from "./_components/types";
+import { SnippetSidebar } from "./_components/snippet-sidebar";
+import {
+  SnippetDetails,
+  type SnippetPatch,
+} from "./_components/snippet-details";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full items-center justify-center text-sm text-cds-helper">
-      Loading editor…
+    <div className="flex h-full items-center justify-center gap-2 text-sm text-cds-helper">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading editor…
     </div>
   ),
 });
 
-type Snippet = {
-  id: string;
-  title: string;
-  description: string | null;
-  language: string;
-  code: string;
-  updatedAt: string | Date;
-  tags: { id: string; name: string }[];
-};
-
-const LANGUAGES = [
-  "python",
-  "shell",
-  "sql",
-  "yaml",
-  "javascript",
-  "typescript",
-  "powershell",
-  "json",
-  "go",
-];
-
-const langTone: Record<string, string> = {
-  python: "blue",
-  shell: "green",
-  sql: "cyan",
-  yaml: "purple",
-  powershell: "teal",
-};
-
-export function CodeClient({ initialSnippets }: { initialSnippets: Snippet[] }) {
+export function CodeClient({
+  initialSnippets,
+  initialFolders,
+}: {
+  initialSnippets: Snippet[];
+  initialFolders: CodeFolder[];
+}) {
   const [snippets, setSnippets] = useState<Snippet[]>(initialSnippets);
+  const [folders, setFolders] = useState<CodeFolder[]>(initialFolders);
   const [activeId, setActiveId] = useState<string | null>(
     initialSnippets[0]?.id ?? null
   );
-  const [code, setCode] = useState(initialSnippets[0]?.code ?? "");
-  const [language, setLanguage] = useState(initialSnippets[0]?.language ?? "python");
-  const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const { theme } = useTheme();
 
   const active = snippets.find((s) => s.id === activeId) ?? null;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
 
-  function open(s: Snippet) {
-    setActiveId(s.id);
-    setCode(s.code);
-    setLanguage(s.language);
+  // ── Auto-save (2s debounce, flush on switch/unload, retry) ──
+  const saveRequest = useCallback(
+    async (
+      id: string,
+      patch: Record<string, unknown>,
+      { keepalive }: { keepalive: boolean }
+    ): Promise<Snippet> => {
+      return apiFetch<Snippet>(`/api/snippets/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+        keepalive,
+      });
+    },
+    []
+  );
+
+  const autosave = useAutoSave<Snippet>({
+    delay: 2000,
+    save: saveRequest,
+    onSaved: (id, saved) => {
+      // Only sync server-managed fields — never clobber code the
+      // user may have typed while the request was in flight.
+      setSnippets((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, updatedAt: saved.updatedAt } : s
+        )
+      );
+    },
+  });
+
+  /**
+   * Optimistic edit + debounced save (used by editor and details panel).
+   * When patch fields don't match the client Snippet shape (e.g. tags
+   * as string[]), callers pass an explicit `optimistic` state.
+   */
+  function edit(patch: Record<string, unknown>, optimistic?: Partial<Snippet>) {
+    if (!active) return;
+    const local = optimistic ?? (patch as Partial<Snippet>);
+    setSnippets((prev) =>
+      prev.map((s) => (s.id === active.id ? { ...s, ...local } : s))
+    );
+    autosave.queue(active.id, patch);
   }
 
+  const selectSnippet = useCallback(
+    (id: string) => {
+      const current = activeIdRef.current;
+      if (current && current !== id) autosave.flush(current);
+      setActiveId(id);
+    },
+    [autosave]
+  );
+
   async function createSnippet() {
-    const res = await fetch("/api/snippets", {
+    const language = "python";
+    const snippet = await apiFetch<Snippet>("/api/snippets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: "New snippet",
-        language: "python",
-        code: "# New snippet\n",
+        language,
+        code: NEW_SNIPPET_TEMPLATES[language],
       }),
     });
-    if (res.ok) {
-      const s = await res.json();
-      setSnippets([{ ...s, tags: [] }, ...snippets]);
-      open({ ...s, tags: [] });
-    }
+    setSnippets((prev) => [snippet, ...prev]);
+    setActiveId(snippet.id);
   }
 
-  async function save() {
-    if (!active) return;
-    setSaving(true);
-    const res = await fetch(`/api/snippets/${active.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, language }),
-    });
-    if (res.ok) {
-      const updated = await res.json();
-      setSnippets(
-        snippets.map((s) =>
-          s.id === updated.id ? { ...s, code, language } : s
-        )
+  async function removeSnippet(id: string) {
+    if (!window.confirm("Delete this snippet? Its versions are removed too.")) {
+      return;
+    }
+    autosave.discard(id);
+    setSnippets((prev) => prev.filter((s) => s.id !== id));
+    if (activeId === id) {
+      setActiveId(snippets.find((s) => s.id !== id)?.id ?? null);
+    }
+    await fetch(`/api/snippets/${id}`, { method: "DELETE" });
+  }
+
+  async function resolveFolder(name: string): Promise<CodeFolder | null> {
+    const existing = folders.find(
+      (f) => f.name.toLowerCase() === name.toLowerCase()
+    );
+    if (existing) return existing;
+    try {
+      const folder = await apiFetch<CodeFolder>("/api/code-folders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      setFolders((prev) =>
+        [...prev, folder].sort((a, b) => a.name.localeCompare(b.name))
       );
+      return folder;
+    } catch {
+      return null;
     }
-    setSaving(false);
   }
 
-  function copy() {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+  function copyCode() {
+    if (!active) return;
+    navigator.clipboard.writeText(active.code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
   }
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
-      <div className="flex w-80 shrink-0 flex-col border-r border-cds-border bg-cds-bg">
-        <div className="border-b border-cds-border p-4">
-          <Button variant="primary" className="w-full" onClick={createSnippet}>
-            <Plus className="h-4 w-4" /> New snippet
-          </Button>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {snippets.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => open(s)}
-              className={cn(
-                "flex w-full flex-col items-start gap-1.5 border-b border-cds-border px-4 py-3 text-left transition-colors",
-                activeId === s.id ? "bg-cds-layer-accent" : "hover:bg-cds-layer"
-              )}
-            >
-              <div className="flex w-full items-center gap-2">
-                <Code2 className="h-3.5 w-3.5 shrink-0 text-cds-helper" />
-                <span className="truncate text-sm font-medium text-cds-text">
-                  {s.title}
-                </span>
-              </div>
-              {s.description && (
-                <span className="line-clamp-2 text-2xs text-cds-helper">
-                  {s.description}
-                </span>
-              )}
-              <Badge tone={(langTone[s.language] as any) ?? "gray"}>
-                {s.language}
-              </Badge>
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* LEFT — folders, filters, search, list */}
+      <SnippetSidebar
+        snippets={snippets}
+        folders={folders}
+        activeId={activeId}
+        onSelect={selectSnippet}
+        onNew={() => void createSnippet()}
+      />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        {active ? (
-          <>
-            <div className="flex items-center justify-between border-b border-cds-border px-6 py-3">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-cds-text">
-                  {active.title}
-                </div>
-                <div className="mt-0.5 text-2xs text-cds-helper">
-                  Updated {relativeTime(active.updatedAt)}
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  className="h-9 border border-cds-border bg-cds-field px-2 text-xs text-cds-text focus:border-cds-blue focus:outline-none"
-                >
-                  {LANGUAGES.map((l) => (
-                    <option key={l} value={l}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
-                <Button variant="secondary" onClick={copy}>
-                  {copied ? (
-                    <Check className="h-4 w-4 text-cds-green" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                  {copied ? "Copied" : "Copy"}
-                </Button>
-                <Button variant="primary" onClick={save} disabled={saving}>
-                  <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save"}
-                </Button>
-              </div>
-            </div>
-            <div className="min-h-0 flex-1">
-              <MonacoEditor
-                height="100%"
-                language={language}
-                theme={theme === "dark" ? "vs-dark" : "light"}
-                value={code}
-                onChange={(v) => setCode(v ?? "")}
-                options={{
-                  fontSize: 13,
-                  fontFamily: "var(--font-plex-mono), monospace",
-                  minimap: { enabled: false },
-                  scrollBeyondLastLine: false,
-                  padding: { top: 16 },
-                  smoothScrolling: true,
-                  renderLineHighlight: "line",
-                  automaticLayout: true,
-                }}
+      {/* CENTER — Monaco editor */}
+      {active ? (
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex items-center justify-between gap-3 border-b border-cds-border px-6 py-2.5">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <input
+                value={active.title}
+                onChange={(e) => edit({ title: e.target.value })}
+                placeholder="Untitled snippet"
+                aria-label="Snippet title"
+                className="w-full bg-transparent text-sm font-semibold text-cds-text placeholder:text-cds-helper focus:outline-none"
               />
+              <div className="flex items-center gap-2 text-2xs text-cds-helper">
+                <SaveStatus
+                  entry={autosave.statusFor(active.id)}
+                  onRetry={() => autosave.retry(active.id)}
+                />
+                {active.category && (
+                  <Badge tone={CODE_CATEGORY_META[active.category].tone}>
+                    {CODE_CATEGORY_META[active.category].label}
+                  </Badge>
+                )}
+                {active.difficulty && (
+                  <span>{DIFFICULTY_LABELS[active.difficulty]}</span>
+                )}
+              </div>
             </div>
-          </>
-        ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-cds-helper">
-            Select or create a snippet.
+            <div className="flex shrink-0 items-center gap-2">
+              <label htmlFor="sn-language" className="sr-only">
+                Language
+              </label>
+              <select
+                id="sn-language"
+                value={active.language}
+                onChange={(e) => edit({ language: e.target.value })}
+                className="h-9 border border-cds-border bg-cds-field px-2 text-xs text-cds-text focus:border-cds-blue focus:outline-none"
+              >
+                {LANGUAGES.map((l) => (
+                  <option key={l} value={l}>
+                    {languageMeta(l).label}
+                  </option>
+                ))}
+                {!LANGUAGES.includes(
+                  active.language as (typeof LANGUAGES)[number]
+                ) && (
+                  <option value={active.language}>
+                    {languageMeta(active.language).label}
+                  </option>
+                )}
+              </select>
+              <Button variant="secondary" onClick={copyCode}>
+                {copied ? (
+                  <Check className="h-4 w-4 text-cds-green" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => void removeSnippet(active.id)}
+                aria-label="Delete snippet"
+                title="Delete snippet"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-        )}
-      </div>
+
+          <div className="min-h-0 flex-1">
+            <MonacoEditor
+              key={active.id} // fresh model per snippet (undo stack, cursor)
+              height="100%"
+              language={languageMeta(active.language).monaco}
+              theme={theme === "dark" ? "vs-dark" : "light"}
+              value={active.code}
+              onChange={(v) => edit({ code: v ?? "" })}
+              options={{
+                fontSize: 13,
+                fontFamily: "var(--font-plex-mono), monospace",
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                padding: { top: 16 },
+                smoothScrolling: true,
+                renderLineHighlight: "line",
+                automaticLayout: true,
+                tabSize: 2,
+              }}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-1 items-center justify-center">
+          <EmptyState
+            icon={Code2}
+            title="No snippet selected"
+            description="Create a snippet to start building your cybersecurity code library."
+            action={
+              <Button variant="primary" onClick={() => void createSnippet()}>
+                New snippet
+              </Button>
+            }
+          />
+        </div>
+      )}
+
+      {/* RIGHT — details + linked knowledge */}
+      {active && (
+        <SnippetDetails
+          key={active.id} // reset local field state per snippet
+          snippet={active}
+          folders={folders}
+          onEdit={edit}
+          onResolveFolder={resolveFolder}
+        />
+      )}
     </div>
   );
 }

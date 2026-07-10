@@ -74,12 +74,30 @@ async function main() {
   const netFolder = await prisma.folder.create({ data: { name: "Networking & Linux" } });
   await prisma.folder.create({ data: { name: "Cloud Security" } });
 
+  // ── Note categories ───────────────────────────
+  const categoryNames = [
+    "Threat Intelligence",
+    "SOC Operations",
+    "Incident Response",
+    "Networking",
+    "Penetration Testing",
+  ];
+  const categories: Record<string, string> = {};
+  for (const name of categoryNames) {
+    const c = await prisma.category.upsert({
+      where: { name },
+      update: {},
+      create: { name },
+    });
+    categories[name] = c.id;
+  }
+
   // ── Notes ─────────────────────────────────────
   await prisma.note.createMany({
     data: [
       {
         title: "MITRE ATT&CK — Initial Access Techniques",
-        category: "Threat Intelligence",
+        categoryId: categories["Threat Intelligence"],
         description:
           "Reference of TA0001 initial-access techniques with detection focus.",
         pinned: true,
@@ -103,7 +121,7 @@ outbound connections immediately following inbound access.
       },
       {
         title: "Windows Event IDs Every Analyst Should Know",
-        category: "SOC Operations",
+        categoryId: categories["SOC Operations"],
         description: "The critical Windows security event IDs for triage.",
         folderId: socFolder.id,
         userId: user.id,
@@ -125,7 +143,7 @@ success is a classic password-spray signature.`,
       },
       {
         title: "Incident Response Lifecycle (NIST 800-61)",
-        category: "Incident Response",
+        categoryId: categories["Incident Response"],
         description: "The four NIST 800-61 IR phases and containment factors.",
         pinned: true,
         folderId: irFolder.id,
@@ -144,7 +162,7 @@ resources needed, effectiveness (partial vs full).`,
       },
       {
         title: "Nmap Cheatsheet",
-        category: "Networking",
+        categoryId: categories["Networking"],
         description: "Quick reference of common Nmap scan commands.",
         folderId: netFolder.id,
         userId: user.id,
@@ -161,7 +179,7 @@ Always get written authorization before scanning anything you don't own.`,
       },
       {
         title: "Linux Privilege Escalation Checklist",
-        category: "Penetration Testing",
+        categoryId: categories["Penetration Testing"],
         description: "First moves for enumerating Linux privilege escalation.",
         folderId: netFolder.id,
         userId: user.id,

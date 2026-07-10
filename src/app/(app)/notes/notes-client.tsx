@@ -37,7 +37,7 @@ import {
 import { NoteList } from "./_components/note-list";
 import { NoteEditor, type NoteEditorHandle } from "./_components/note-editor";
 import { NoteRail } from "./_components/note-rail";
-import { SaveStatus } from "./_components/save-status";
+import { SaveStatus } from "@/components/save-status";
 import { PreviewModal } from "./_components/preview-modal";
 import { VersionsModal } from "./_components/versions-modal";
 import {

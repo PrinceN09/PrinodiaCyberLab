@@ -13,32 +13,18 @@ import {
   Upload,
 } from "lucide-react";
 import { Tabs } from "@/components/ui/tabs";
-import { Modal } from "@/components/ui/modal";
-import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { KnowledgePicker } from "@/components/knowledge-picker";
 import { cn, formatBytes, relativeTime } from "@/lib/utils";
 import { extractHeadings } from "@/lib/notes/markdown-utils";
+import { MODULE_ROUTES } from "@/lib/knowledge-types";
 import {
   apiFetch,
   LINK_TYPE_META,
   type AttachmentMeta,
-  type KnowledgeHit,
   type NoteLink,
   type NoteLinkType,
 } from "./types";
-
-const MODULE_ROUTES: Record<NoteLinkType, string> = {
-  COURSE: "/learning/courses",
-  LESSON: "/learning/courses",
-  PROJECT: "/projects",
-  CODE_SNIPPET: "/code",
-  DIAGRAM: "/diagrams",
-  STUDY_SESSION: "/learning/sessions",
-  INTERVIEW_QUESTION: "/career/interview",
-  PORTFOLIO_ITEM: "/career/portfolio",
-  REPORT: "/reports",
-  NOTE: "/notes",
-};
 
 // ── Table of contents ───────────────────────────
 
@@ -198,161 +184,24 @@ export function RelatedPanel({
         </div>
       ))}
 
-      <AddLinkModal
+      <KnowledgePicker
         open={addOpen}
-        noteId={noteId}
+        excludeNoteId={noteId}
         onClose={() => setAddOpen(false)}
-        onAdded={() => void reload()}
+        onPick={async (hit) => {
+          await apiFetch(`/api/notes/${noteId}/links`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              targetType: hit.type,
+              targetId: hit.id,
+              label: hit.label,
+            }),
+          });
+          void reload();
+        }}
       />
     </div>
-  );
-}
-
-function AddLinkModal({
-  open,
-  noteId,
-  onClose,
-  onAdded,
-}: {
-  open: boolean;
-  noteId: string;
-  onClose: () => void;
-  onAdded: () => void;
-}) {
-  const [type, setType] = useState<NoteLinkType | "ALL">("ALL");
-  const [q, setQ] = useState("");
-  const [hits, setHits] = useState<KnowledgeHit[] | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (!open) {
-      setQ("");
-      setHits(null);
-      setType("ALL");
-      setAddedIds(new Set());
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    if (debounce.current) clearTimeout(debounce.current);
-    debounce.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const params = new URLSearchParams({ q, exclude: noteId });
-        if (type !== "ALL") params.set("types", type);
-        setHits(
-          await apiFetch<KnowledgeHit[]>(
-            `/api/knowledge/search?${params.toString()}`
-          )
-        );
-      } catch {
-        setHits([]);
-      } finally {
-        setSearching(false);
-      }
-    }, 300);
-    return () => {
-      if (debounce.current) clearTimeout(debounce.current);
-    };
-  }, [q, type, open, noteId]);
-
-  async function add(hit: KnowledgeHit) {
-    setAddedIds((prev) => new Set(prev).add(`${hit.type}:${hit.id}`));
-    try {
-      await apiFetch(`/api/notes/${noteId}/links`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          targetType: hit.type,
-          targetId: hit.id,
-          label: hit.label,
-        }),
-      });
-      onAdded();
-    } catch {
-      setAddedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(`${hit.type}:${hit.id}`);
-        return next;
-      });
-    }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="Link knowledge" wide>
-      <div className="space-y-4">
-        <div className="grid grid-cols-[10rem_1fr] gap-3">
-          <div>
-            <Label htmlFor="link-type">Type</Label>
-            <Select
-              id="link-type"
-              value={type}
-              onChange={(e) => setType(e.target.value as NoteLinkType | "ALL")}
-            >
-              <option value="ALL">All types</option>
-              {(Object.keys(LINK_TYPE_META) as NoteLinkType[]).map((t) => (
-                <option key={t} value={t}>
-                  {LINK_TYPE_META[t].plural}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="link-search">Search</Label>
-            <Input
-              id="link-search"
-              value={q}
-              autoFocus
-              placeholder="Search across your workspace…"
-              onChange={(e) => setQ(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="max-h-80 overflow-y-auto border border-cds-border">
-          {searching && <RailLoading />}
-          {!searching && hits?.length === 0 && (
-            <RailEmpty>No matches. Try a different search or type.</RailEmpty>
-          )}
-          {!searching &&
-            hits?.map((hit) => {
-              const key = `${hit.type}:${hit.id}`;
-              const added = addedIds.has(key);
-              return (
-                <button
-                  key={key}
-                  onClick={() => !added && add(hit)}
-                  disabled={added}
-                  className={cn(
-                    "flex w-full items-center gap-3 border-b border-cds-border px-3 py-2 text-left text-sm transition-colors last:border-b-0",
-                    added
-                      ? "cursor-default opacity-50"
-                      : "hover:bg-cds-layer-accent"
-                  )}
-                >
-                  <span className="w-32 shrink-0 text-2xs uppercase tracking-wider text-cds-helper">
-                    {LINK_TYPE_META[hit.type].label}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-cds-text">
-                    {hit.label}
-                  </span>
-                  {hit.meta && (
-                    <span className="shrink-0 text-2xs text-cds-helper">
-                      {hit.meta}
-                    </span>
-                  )}
-                  <span className="shrink-0 text-2xs text-cds-link">
-                    {added ? "Linked" : "+ Link"}
-                  </span>
-                </button>
-              );
-            })}
-        </div>
-      </div>
-    </Modal>
   );
 }
 

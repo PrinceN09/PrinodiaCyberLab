@@ -180,18 +180,81 @@ model NoteLink {
   @@index([noteId])
 }
 
+enum CodeCategory {
+  SOC
+  SIEM
+  THREAT_HUNTING
+  INCIDENT_RESPONSE
+  VULNERABILITY_MANAGEMENT
+  GRC
+  PENETRATION_TESTING
+  LINUX
+  NETWORKING
+  CLOUD_SECURITY
+  DETECTION_ENGINEERING
+}
+
+/// Folders for organizing code snippets (previously a free-text
+/// string on CodeSnippet). Created on demand from the details panel.
+model CodeFolder {
+  id        String        @id @default(cuid())
+  name      String        @unique
+  snippets  CodeSnippet[]
+  createdAt DateTime      @default(now())
+}
+
 model CodeSnippet {
-  id          String   @id @default(cuid())
+  id          String                 @id @default(cuid())
   title       String
   description String?
-  language    String   @default("python")
-  code        String   @default("")
-  folder      String?
+  language    String                 @default("python")
+  code        String                 @default("")
+  category    CodeCategory?
+  difficulty  NoteDifficulty?
+  folderId    String?
+  folder      CodeFolder?            @relation(fields: [folderId], references: [id], onDelete: SetNull)
   tags        Tag[]
+  versions    CodeSnippetVersion[]
+  relations   CodeSnippetRelation[]
   userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@index([folderId])
+  @@index([category])
+  @@index([language])
+}
+
+/// Immutable snapshots of a snippet, captured by auto-save whenever
+/// title/code change — same pattern as NoteVersion.
+model CodeSnippetVersion {
+  id        String      @id @default(cuid())
+  snippetId String
+  snippet   CodeSnippet @relation(fields: [snippetId], references: [id], onDelete: Cascade)
+  title     String
+  code      String
+  language  String      @default("python")
+  cause     String      @default("autosave")
+  createdAt DateTime    @default(now())
+
+  @@index([snippetId, createdAt])
+}
+
+/// Knowledge-graph edge from a snippet to notes, projects, courses,
+/// and lessons. Reuses NoteLinkType; only NOTE/PROJECT/COURSE/LESSON
+/// are accepted by the API.
+model CodeSnippetRelation {
+  id         String       @id @default(cuid())
+  snippetId  String
+  snippet    CodeSnippet  @relation(fields: [snippetId], references: [id], onDelete: Cascade)
+  targetType NoteLinkType
+  targetId   String
+  label      String
+  createdAt  DateTime     @default(now())
+
+  @@unique([snippetId, targetType, targetId])
+  @@index([snippetId])
 }
 
 model Diagram {

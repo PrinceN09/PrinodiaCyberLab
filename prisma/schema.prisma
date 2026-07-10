@@ -62,29 +62,122 @@ model Tag {
   projects Project[]
 }
 
+/// Managed vocabulary for note categories (previously a free-text
+/// string on Note). Created on demand from the note details form.
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   @default("blue")
+  notes     Note[]
+  createdAt DateTime @default(now())
+}
+
 // ─────────────────────────────────────────────
 // Knowledge base
 // ─────────────────────────────────────────────
 
+enum NoteStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+}
+
+enum NoteDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
 model Note {
-  id          String   @id @default(cuid())
+  id          String          @id @default(cuid())
   title       String
-  category    String?
+  summary     String?
   description String?
-  content     String   @default("")
-  pinned      Boolean  @default(false)
+  content     String          @default("")
+  status      NoteStatus      @default(DRAFT)
+  difficulty  NoteDifficulty?
+  pinned      Boolean         @default(false)
+  favorite    Boolean         @default(false)
+  categoryId  String?
+  category    Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   folderId    String?
-  folder      Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  folder      Folder?         @relation(fields: [folderId], references: [id], onDelete: SetNull)
   tags        Tag[]
   lessonId    String?
-  lesson      Lesson?  @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  lesson      Lesson?         @relation(fields: [lessonId], references: [id], onDelete: SetNull)
   userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions    NoteVersion[]
+  attachments Attachment[]
+  links       NoteLink[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   @@index([folderId])
   @@index([lessonId])
+  @@index([categoryId])
+  @@index([status])
+}
+
+/// Immutable point-in-time snapshots of a note, captured by the
+/// auto-save pipeline on every content change. Powers version
+/// history (list, preview, restore). Never updated in place.
+model NoteVersion {
+  id        String   @id @default(cuid())
+  noteId    String
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  title     String
+  content   String
+  cause     String   @default("autosave") // autosave | manual | restore
+  createdAt DateTime @default(now())
+
+  @@index([noteId, createdAt])
+}
+
+/// File attachment metadata. The binary lives on disk under
+/// uploads/notes/<noteId>/ and is streamed via the attachments API.
+model Attachment {
+  id          String   @id @default(cuid())
+  noteId      String
+  note        Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  fileName    String
+  mimeType    String
+  size        Int
+  storagePath String
+  createdAt   DateTime @default(now())
+
+  @@index([noteId])
+}
+
+enum NoteLinkType {
+  COURSE
+  LESSON
+  PROJECT
+  CODE_SNIPPET
+  DIAGRAM
+  STUDY_SESSION
+  INTERVIEW_QUESTION
+  PORTFOLIO_ITEM
+  REPORT
+  NOTE
+}
+
+/// Knowledge-graph edge from a note to any other entity in the
+/// workspace (courses, lessons, snippets, other notes, …).
+/// `label` is cached at link time for cheap display.
+model NoteLink {
+  id         String       @id @default(cuid())
+  noteId     String
+  note       Note         @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  targetType NoteLinkType
+  targetId   String
+  label      String
+  createdAt  DateTime     @default(now())
+
+  @@unique([noteId, targetType, targetId])
+  @@index([noteId])
 }
 
 model CodeSnippet {

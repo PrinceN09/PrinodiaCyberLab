@@ -1,39 +1,51 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/current-user";
+import { NOTE_INCLUDE, parseNotePatch } from "@/lib/notes/save-note";
 
 export async function GET() {
+  const user = await getCurrentUser();
   const notes = await prisma.note.findMany({
+    where: { userId: user.id },
     orderBy: [{ pinned: "desc" }, { updatedAt: "desc" }],
-    include: { folder: true, tags: true },
+    include: NOTE_INCLUDE,
   });
   return NextResponse.json(notes);
 }
 
 export async function POST(req: Request) {
-  const body = await req.json();
-  const user = await getCurrentUser();
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
-  const tagNames: string[] = Array.isArray(body.tags) ? body.tags : [];
+  const patch = parseNotePatch(body);
+  if (!patch) {
+    return NextResponse.json({ error: "Invalid note payload" }, { status: 400 });
+  }
+
+  const user = await getCurrentUser();
+  const { tags, ...fields } = patch;
 
   const note = await prisma.note.create({
     data: {
-      title: body.title ?? "Untitled note",
-      category: body.category ?? null,
-      description: body.description ?? null,
-      content: body.content ?? "",
-      folderId: body.folderId || null,
+      ...fields,
+      title: fields.title?.trim() || "Untitled note",
+      content: fields.content ?? "",
       userId: user.id,
-      ...(tagNames.length > 0 && {
-        tags: {
-          connectOrCreate: tagNames.map((name) => ({
-            where: { name },
-            create: { name },
-          })),
-        },
-      }),
+      ...(tags &&
+        tags.length > 0 && {
+          tags: {
+            connectOrCreate: tags.map((name) => ({
+              where: { name },
+              create: { name },
+            })),
+          },
+        }),
     },
-    include: { folder: true, tags: true },
+    include: NOTE_INCLUDE,
   });
   return NextResponse.json(note, { status: 201 });
 }

@@ -244,3 +244,42 @@ body {
   border-top: 1px solid rgb(var(--cds-border));
   margin: 1.5rem 0;
 }
+/* GFM task lists (checklists) */
+.prose-cyber li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.25rem;
+}
+.prose-cyber li > input[type="checkbox"] {
+  margin-right: 0.5rem;
+  accent-color: rgb(var(--cds-blue));
+  vertical-align: middle;
+}
+.prose-cyber li:has(> input[type="checkbox"]:checked) {
+  color: rgb(var(--cds-helper));
+  text-decoration: line-through;
+}
+.prose-cyber h4,
+.prose-cyber h5,
+.prose-cyber h6 {
+  color: rgb(var(--cds-text));
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+}
+
+/* PDF export: print only the preview modal's content. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    overflow: visible;
+  }
+}

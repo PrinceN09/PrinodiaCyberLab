@@ -41,6 +41,13 @@ model User {
   siemRules        SiemRule[]
   threatHunts      ThreatHunt[]
   iocs             Ioc[]
+  userSkills       UserSkill[]
+  certifications   Certification[]
+  portfolioRepos   PortfolioRepo[]
+  labs             Lab[]
+  cyberProjects    CybersecurityProject[]
+  notifications    Notification[]
+  notificationRules NotificationRule[]
 }
 
 model Folder {
@@ -555,6 +562,8 @@ model Lesson {
   module        CourseModule   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   notes         Note[]
   studySessions StudySession[]
+  labs          Lab[]
+  skills        LessonSkill[]
 
   @@index([moduleId])
 }
@@ -589,6 +598,7 @@ model Resume {
   content   Json
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications JobApplication[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -601,6 +611,7 @@ model CoverLetter {
   content   String   @default("")
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications JobApplication[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -619,11 +630,19 @@ model LinkedInProfile {
 }
 
 enum JobStatus {
+  DISCOVERED
   SAVED
+  PREPARING
+  READY_TO_APPLY
   APPLIED
+  RECRUITER_CONTACT
+  ASSESSMENT
   INTERVIEW
+  FINAL_INTERVIEW
   OFFER
   REJECTED
+  WITHDRAWN
+  ARCHIVED
 }
 
 model JobApplication {
@@ -637,12 +656,38 @@ model JobApplication {
   appliedDate   DateTime?
   interviewDate DateTime?
   notes         String?
+  // Job-discovery integration (v0.4)
+  jobPostingId  String?
+  jobPosting    JobPosting?  @relation(fields: [jobPostingId], references: [id], onDelete: SetNull)
+  resumeId      String?
+  resume        Resume?      @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  coverLetterId String?
+  coverLetter   CoverLetter? @relation(fields: [coverLetterId], references: [id], onDelete: SetNull)
+  contactPerson String?
+  recruiter     String?
+  followUpDate  DateTime?
+  events        JobApplicationEvent[]
   userId        String
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   @@index([status])
+  @@index([jobPostingId])
+}
+
+/// Activity timeline for an application (status changes, notes,
+/// interviews, follow-ups). Append-only.
+model JobApplicationEvent {
+  id            String         @id @default(cuid())
+  applicationId String
+  application   JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  kind          String // status_change | note | interview | follow_up | attachment | outcome
+  note          String?
+  occurredAt    DateTime       @default(now())
+  createdAt     DateTime       @default(now())
+
+  @@index([applicationId, occurredAt])
 }
 
 model InterviewPrep {
@@ -672,4 +717,400 @@ model PortfolioItem {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// Job Discovery & Career Tracking (v0.4)
+//
+// Entity mapping vs. the spec:
+//   LearningProgram → existing Course (provider field)
+//   CoursePhase     → existing CourseModule (order field)
+//   PortfolioArtifact → PortfolioRepo + CybersecurityProject.artifactUrl
+// ─────────────────────────────────────────────
+
+enum JobSourceType {
+  HIRING_CAFE // unofficial endpoint — experimental, disabled by default
+  GREENHOUSE
+  LEVER
+  ASHBY
+  SMARTRECRUITERS
+  WORKDAY // unofficial per-tenant endpoint — experimental
+  JOB_BANK_CA // RSS-based — no official API
+  EMPLOYER_DIRECT
+  MANUAL
+}
+
+enum WorkplaceType {
+  REMOTE
+  HYBRID
+  ON_SITE
+  UNKNOWN
+}
+
+enum JobEmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  TEMPORARY
+  INTERNSHIP
+  COMMISSION
+  UNKNOWN
+}
+
+enum SeniorityLevel {
+  ENTRY
+  ASSOCIATE
+  INTERMEDIATE
+  SENIOR
+  LEAD
+  UNKNOWN
+}
+
+enum SalaryPeriod {
+  HOUR
+  DAY
+  WEEK
+  MONTH
+  YEAR
+}
+
+enum ImportRunStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
+/// How a skill claim is backed. Training labs are never presented
+/// as professional experience (spec requirement).
+enum SkillProvenance {
+  PROFESSIONAL
+  PERSONAL_PROJECT
+  TRAINING_LAB
+  CERTIFICATION
+  DEMONSTRATED
+  FAMILIARITY
+}
+
+enum CertificationStatus {
+  PLANNED
+  IN_PROGRESS
+  EARNED
+  EXPIRED
+}
+
+enum NotificationType {
+  HIGH_MATCH
+  VANCOUVER_JOB
+  REMOTE_CANADA_JOB
+  EXPIRING_SOON
+  DEADLINE_APPROACHING
+  FOLLOW_UP_DUE
+  TRENDING_SKILL
+  PROJECT_MATCH
+  SYSTEM
+}
+
+/// One normalized job posting. Multiple discovered sources attach
+/// via JobPostingSource; the employer's direct link wins as
+/// applicationUrl when available.
+model JobPosting {
+  id                String  @id @default(cuid())
+  // Dedup identity
+  normalizedTitle   String
+  normalizedCompany String
+  duplicateGroupId  String?
+  // Display
+  title             String
+  company           String
+  companyLogo       String?
+  description       String  @default("")
+  responsibilities  String?
+  requiredSkillsText  String[] @default([])
+  preferredSkillsText String[] @default([])
+  // Location
+  location       String?
+  city           String?
+  province       String?
+  country        String?
+  workplaceType  WorkplaceType     @default(UNKNOWN)
+  employmentType JobEmploymentType @default(UNKNOWN)
+  seniority      SeniorityLevel    @default(UNKNOWN)
+  /// 1 (Vancouver) … 7 (US remote accepting Canadians); 99 = ineligible
+  locationPriority Int @default(99)
+  // Compensation
+  salaryMin      Int?
+  salaryMax      Int?
+  salaryCurrency String?
+  salaryPeriod   SalaryPeriod?
+  // Eligibility
+  acceptsCanadianApplicants Boolean  @default(true)
+  requiresUSResidency       Boolean  @default(false)
+  requiresCitizenship       Boolean  @default(false)
+  requiresSecurityClearance Boolean  @default(false)
+  visaSponsorship           Boolean?
+  // Lifecycle (spec: never rely on importedAt alone for the 7-day rule)
+  sourcePostedAt DateTime?
+  firstSeenAt    DateTime  @default(now())
+  lastVerifiedAt DateTime  @default(now())
+  expiresAt      DateTime?
+  importedAt     DateTime  @default(now())
+  isActive       Boolean   @default(true)
+  archivedAt     DateTime?
+  // Matching (recomputed by JobMatchingService; single-user app)
+  matchScore     Int?
+  matchBreakdown Json?
+  matchedSkills  String[] @default([])
+  missingSkills  String[] @default([])
+  // Apply links (employer-direct preferred)
+  applicationUrl   String?
+  primarySourceUrl String?
+
+  sources           JobPostingSource[]
+  skillRequirements JobSkillRequirement[]
+  applications      JobApplication[]
+  notifications     Notification[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([isActive, sourcePostedAt])
+  @@index([normalizedCompany, normalizedTitle])
+  @@index([matchScore])
+  @@index([locationPriority])
+}
+
+/// A place where a posting was discovered. One posting may appear on
+/// HiringCafe, an ATS board, and the employer site simultaneously.
+model JobPostingSource {
+  id             String        @id @default(cuid())
+  jobPostingId   String
+  jobPosting     JobPosting    @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  sourceType     JobSourceType
+  sourceJobId    String?
+  sourceUrl      String
+  applicationUrl String?
+  raw            Json?
+  importedAt     DateTime      @default(now())
+  lastSeenAt     DateTime      @default(now())
+
+  @@unique([sourceType, sourceUrl])
+  @@index([jobPostingId])
+}
+
+/// A configured source to poll, e.g. one Greenhouse board slug or a
+/// Job Bank RSS query. Providers read these; secrets stay in env vars.
+model JobSourceConfig {
+  id         String           @id @default(cuid())
+  sourceType JobSourceType
+  /// Provider-specific identifier: board slug, tenant, feed URL, …
+  identifier String
+  label      String
+  enabled    Boolean          @default(true)
+  /// False for reverse-engineered endpoints (HiringCafe, Workday)
+  official   Boolean          @default(true)
+  lastRunAt  DateTime?
+  lastStatus ImportRunStatus?
+  createdAt  DateTime         @default(now())
+
+  importRuns ImportRun[]
+
+  @@unique([sourceType, identifier])
+}
+
+/// Audit log for every ingestion run (source health monitoring).
+model ImportRun {
+  id           String           @id @default(cuid())
+  sourceType   JobSourceType
+  configId     String?
+  config       JobSourceConfig? @relation(fields: [configId], references: [id], onDelete: SetNull)
+  status       ImportRunStatus  @default(RUNNING)
+  startedAt    DateTime         @default(now())
+  finishedAt   DateTime?
+  jobsFound    Int              @default(0)
+  jobsCreated  Int              @default(0)
+  jobsUpdated  Int              @default(0)
+  jobsArchived Int              @default(0)
+  error        String?
+  details      Json?
+
+  @@index([sourceType, startedAt])
+}
+
+// ── Skills & career profile ──────────────────
+
+model Skill {
+  id       String   @id @default(cuid())
+  name     String   @unique
+  aliases  String[] @default([])
+  category String   @default("General") // SIEM, Cloud, GRC, Tooling, …
+  createdAt DateTime @default(now())
+
+  userSkills   UserSkill[]
+  requirements JobSkillRequirement[]
+  lessons      LessonSkill[]
+  labs         LabSkill[]
+  projects     ProjectSkill[]
+}
+
+model UserSkill {
+  id         String          @id @default(cuid())
+  userId     String
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skillId    String
+  skill      Skill           @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  provenance SkillProvenance @default(FAMILIARITY)
+  /// Where this claim comes from (lab id, repo, cert name, …)
+  evidence   String?
+  acquiredAt DateTime        @default(now())
+
+  @@unique([userId, skillId])
+}
+
+/// A skill a posting asks for, extracted during normalization.
+model JobSkillRequirement {
+  id           String     @id @default(cuid())
+  jobPostingId String
+  jobPosting   JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  skillId      String
+  skill        Skill      @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  required     Boolean    @default(true) // false = preferred
+  rawText      String?
+
+  @@unique([jobPostingId, skillId])
+}
+
+// ── Portfolio & credentials ──────────────────
+
+/// A public GitHub repository. Only repos with includeInMatching
+/// participate in match scoring (spec: user decides, repos are not
+/// automatically presented as cybersecurity experience).
+model PortfolioRepo {
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName          String // e.g. PrinceN09/log-parser
+  name              String
+  description       String?
+  url               String
+  homepage          String?
+  languages         Json?
+  topics            String[]  @default([])
+  readmeSummary     String?
+  /// 0–100 heuristic: README present, sections, license, …
+  docCompleteness   Int?
+  detectedSkills    String[]  @default([])
+  includeInMatching Boolean   @default(false)
+  lastPushedAt      DateTime?
+  syncedAt          DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+
+  @@unique([userId, fullName])
+}
+
+model Certification {
+  id            String              @id @default(cuid())
+  userId        String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  issuer        String?
+  status        CertificationStatus @default(PLANNED)
+  earnedAt      DateTime?
+  expiresAt     DateTime?
+  credentialUrl String?
+  createdAt     DateTime            @default(now())
+}
+
+// ── Training integration ─────────────────────
+
+model Lab {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  lessonId    String?
+  lesson      Lesson?      @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  status      ModuleStatus @default(NOT_STARTED)
+  completedAt DateTime?
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills      LabSkill[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([lessonId])
+}
+
+model CybersecurityProject {
+  id          String         @id @default(cuid())
+  title       String
+  description String?
+  repoUrl     String?
+  artifactUrl String?
+  status      ModuleStatus   @default(NOT_STARTED)
+  completedAt DateTime?
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills      ProjectSkill[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model LessonSkill {
+  id       String @id @default(cuid())
+  lessonId String
+  lesson   Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  skillId  String
+  skill    Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, skillId])
+}
+
+model LabSkill {
+  id      String @id @default(cuid())
+  labId   String
+  lab     Lab    @relation(fields: [labId], references: [id], onDelete: Cascade)
+  skillId String
+  skill   Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([labId, skillId])
+}
+
+model ProjectSkill {
+  id        String               @id @default(cuid())
+  projectId String
+  project   CybersecurityProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  skillId   String
+  skill     Skill                @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, skillId])
+}
+
+// ── Notifications ────────────────────────────
+
+model Notification {
+  id           String           @id @default(cuid())
+  userId       String
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         NotificationType
+  title        String
+  body         String?
+  jobPostingId String?
+  jobPosting   JobPosting?      @relation(fields: [jobPostingId], references: [id], onDelete: SetNull)
+  readAt       DateTime?
+  createdAt    DateTime         @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model NotificationRule {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  enabled   Boolean          @default(true)
+  /// e.g. minimum match score for HIGH_MATCH
+  threshold Int?
+  config    Json?
+  createdAt DateTime         @default(now())
+
+  @@unique([userId, type])
 }

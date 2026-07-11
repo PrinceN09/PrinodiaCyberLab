@@ -56,3 +56,11 @@ export function priorityTone(priority: number): Tone {
   if (priority <= 5) return "blue";
   return "teal";
 }
+
+/** Match-score chip tone by band. */
+export function matchTone(score: number): Tone {
+  if (score >= 75) return "green";
+  if (score >= 50) return "blue";
+  if (score >= 25) return "teal";
+  return "gray";
+}

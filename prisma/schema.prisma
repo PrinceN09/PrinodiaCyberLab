@@ -858,10 +858,12 @@ model JobPosting {
   isActive       Boolean   @default(true)
   archivedAt     DateTime?
   // Matching (recomputed by JobMatchingService; single-user app)
-  matchScore     Int?
-  matchBreakdown Json?
-  matchedSkills  String[] @default([])
-  missingSkills  String[] @default([])
+  matchScore        Int?
+  matchBreakdown    Json?
+  matchedSkills     String[] @default([])
+  missingSkills     String[] @default([])
+  /// Count of missing REQUIRED skills (fewest-gaps sorting)
+  missingSkillCount Int?
   // Apply links (employer-direct preferred)
   applicationUrl   String?
   primarySourceUrl String?
@@ -876,6 +878,7 @@ model JobPosting {
   @@index([isActive, sourcePostedAt])
   @@index([normalizedCompany, normalizedTitle])
   @@index([matchScore])
+  @@index([missingSkillCount])
   @@index([locationPriority])
 }
 

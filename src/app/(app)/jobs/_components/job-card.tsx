@@ -20,6 +20,7 @@ import {
 import { jobStatusMeta } from "@/lib/career";
 import {
   EMPLOYMENT_META,
+  matchTone,
   priorityTone,
   SENIORITY_LABELS,
   SOURCE_LABELS,
@@ -82,12 +83,22 @@ export function JobCard({
             {job.company}
           </div>
         </div>
-        <span className="flex shrink-0 items-center gap-1 text-2xs text-cds-helper">
-          <Clock className="h-3 w-3" aria-hidden="true" />
-          <span title={job.sourcePostedAt ? "Original posting date" : "First seen (source has no posting date)"}>
-            {formatPostingAge(age)}
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          {job.matchScore !== null && (
+            <Badge
+              tone={matchTone(job.matchScore)}
+              aria-label={`Match score ${job.matchScore} out of 100`}
+            >
+              {job.matchScore} match
+            </Badge>
+          )}
+          <span className="flex items-center gap-1 text-2xs text-cds-helper">
+            <Clock className="h-3 w-3" aria-hidden="true" />
+            <span title={job.sourcePostedAt ? "Original posting date" : "First seen (source has no posting date)"}>
+              {formatPostingAge(age)}
+            </span>
           </span>
-        </span>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -115,6 +126,33 @@ export function JobCard({
         <div className="text-2xs text-cds-helper">
           via {job.sources.map((s) => SOURCE_LABELS[s.sourceType] ?? s.sourceType).join(", ")}
         </div>
+        {(job.matchedSkills.length > 0 || job.missingSkills.length > 0) && (
+          <div className="flex flex-wrap items-center gap-1 pt-1">
+            {job.matchedSkills.slice(0, 3).map((s) => (
+              <span
+                key={`m-${s}`}
+                className="border border-cds-green/40 bg-cds-green/10 px-1.5 py-0.5 text-2xs text-cds-green"
+                title={`You have: ${s}`}
+              >
+                ✓ {s}
+              </span>
+            ))}
+            {job.missingSkills.slice(0, 2).map((s) => (
+              <span
+                key={`x-${s}`}
+                className="border border-cds-border px-1.5 py-0.5 text-2xs text-cds-helper"
+                title={`Missing: ${s}`}
+              >
+                + {s}
+              </span>
+            ))}
+            {job.missingSkillCount !== null && job.missingSkillCount > 2 && (
+              <span className="text-2xs text-cds-helper">
+                +{job.missingSkillCount - 2} more gaps
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="mt-auto flex items-center gap-2 pt-4">

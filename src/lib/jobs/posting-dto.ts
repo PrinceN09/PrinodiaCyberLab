@@ -28,6 +28,10 @@ export const POSTING_LIST_SELECT = {
   expiresAt: true,
   applicationUrl: true,
   primarySourceUrl: true,
+  matchScore: true,
+  matchedSkills: true,
+  missingSkills: true,
+  missingSkillCount: true,
   sources: { select: { sourceType: true, sourceUrl: true } },
   applications: { select: { id: true, status: true } },
 } satisfies Prisma.JobPostingSelect;
@@ -62,6 +66,10 @@ export function toPostingDto(p: PostingRow) {
     expiresAt: p.expiresAt?.toISOString() ?? null,
     applicationUrl: p.applicationUrl,
     primarySourceUrl: p.primarySourceUrl,
+    matchScore: p.matchScore,
+    matchedSkills: p.matchedSkills,
+    missingSkills: p.missingSkills,
+    missingSkillCount: p.missingSkillCount,
     sources: p.sources.map((s) => ({
       sourceType: s.sourceType,
       sourceUrl: s.sourceUrl,

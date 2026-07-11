@@ -42,7 +42,13 @@ export function locationPriorityLabel(priority: number): string {
 
 // ── Query parsing ───────────────────────────────
 
-export const JOB_SORTS = ["priority", "recent", "salary"] as const;
+export const JOB_SORTS = [
+  "match",
+  "priority",
+  "recent",
+  "salary",
+  "gaps",
+] as const;
 export type JobSort = (typeof JOB_SORTS)[number];
 
 const WORKPLACES: WorkplaceType[] = ["REMOTE", "HYBRID", "ON_SITE", "UNKNOWN"];
@@ -130,7 +136,7 @@ export function parseJobQuery(params: ParamsLike): JobQuery {
       max: JOB_MAX_AGE_DAYS,
       fallback: JOB_MAX_AGE_DAYS,
     }),
-    sort: oneOf(params.get("sort"), JOB_SORTS) ?? "priority",
+    sort: oneOf(params.get("sort"), JOB_SORTS) ?? "match",
     page: clampInt(params.get("page"), { min: 1, max: 10_000, fallback: 1 }),
     pageSize: clampInt(params.get("pageSize"), {
       min: 1,
@@ -195,6 +201,18 @@ export function buildJobOrderBy(
   sort: JobSort
 ): Prisma.JobPostingOrderByWithRelationInput[] {
   switch (sort) {
+    case "match":
+      return [
+        { matchScore: { sort: "desc", nulls: "last" } },
+        { locationPriority: "asc" },
+        { sourcePostedAt: { sort: "desc", nulls: "last" } },
+      ];
+    case "gaps":
+      return [
+        { missingSkillCount: { sort: "asc", nulls: "last" } },
+        { matchScore: { sort: "desc", nulls: "last" } },
+        { locationPriority: "asc" },
+      ];
     case "recent":
       return [
         { sourcePostedAt: { sort: "desc", nulls: "last" } },
@@ -210,8 +228,8 @@ export function buildJobOrderBy(
     default:
       return [
         { locationPriority: "asc" },
+        { matchScore: { sort: "desc", nulls: "last" } },
         { sourcePostedAt: { sort: "desc", nulls: "last" } },
-        { firstSeenAt: "desc" },
       ];
   }
 }

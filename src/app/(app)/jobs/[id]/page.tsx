@@ -21,13 +21,16 @@ import {
   locationPriorityLabel,
   postingAgeDays,
 } from "@/lib/jobs/discovery";
+import type { MatchResult } from "@/lib/jobs/matching";
 import {
   EMPLOYMENT_META,
+  matchTone,
   priorityTone,
   SENIORITY_LABELS,
   SOURCE_LABELS,
   WORKPLACE_META,
 } from "../_components/types";
+import { MatchBreakdown } from "../_components/match-breakdown";
 import { SaveButton } from "./save-button";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +64,7 @@ export default async function JobDetailsPage({
 
   const application = job.applications[0] ?? null;
   const discoverable = isDiscoverable(job);
+  const matchResult = job.matchBreakdown as MatchResult | null;
   const age = postingAgeDays(job.sourcePostedAt, job.firstSeenAt);
   const salary = formatSalary(
     job.salaryMin,
@@ -131,6 +135,11 @@ export default async function JobDetailsPage({
                   {job.location ? ` · ${job.location}` : ""}
                 </div>
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                  {job.matchScore !== null && (
+                    <Badge tone={matchTone(job.matchScore)}>
+                      {job.matchScore} match
+                    </Badge>
+                  )}
                   <Badge tone={priorityTone(job.locationPriority)}>
                     {locationPriorityLabel(job.locationPriority)}
                   </Badge>
@@ -162,6 +171,12 @@ export default async function JobDetailsPage({
               {salary && <span>{salary}</span>}
             </div>
           </div>
+
+          {matchResult && (
+            <div className="mt-4">
+              <MatchBreakdown result={matchResult} />
+            </div>
+          )}
 
           <section
             aria-label="Job description"

@@ -26,7 +26,7 @@ describe("parseJobQuery — validation of untrusted params", () => {
       source: null,
       salaryMin: null,
       postedWithinDays: 7,
-      sort: "priority",
+      sort: "match",
       page: 1,
       pageSize: 20,
     });
@@ -48,7 +48,7 @@ describe("parseJobQuery — validation of untrusted params", () => {
     expect(q.seniority).toBe("ENTRY");
     expect(q.province).toBeNull();
     expect(q.source).toBe("GREENHOUSE");
-    expect(q.sort).toBe("priority");
+    expect(q.sort).toBe("match");
   });
 
   it("clamps numerics: page, pageSize, days, salary", () => {
@@ -112,6 +112,16 @@ describe("buildJobWhere — mandatory eligibility filter", () => {
 });
 
 describe("buildJobOrderBy — sorting", () => {
+  it("match sort ranks matchScore first, nulls last", () => {
+    expect(buildJobOrderBy("match")[0]).toEqual({
+      matchScore: { sort: "desc", nulls: "last" },
+    });
+  });
+  it("gaps sort ranks fewest missing required skills first", () => {
+    expect(buildJobOrderBy("gaps")[0]).toEqual({
+      missingSkillCount: { sort: "asc", nulls: "last" },
+    });
+  });
   it("priority sort ranks location first", () => {
     expect(buildJobOrderBy("priority")[0]).toEqual({ locationPriority: "asc" });
   });

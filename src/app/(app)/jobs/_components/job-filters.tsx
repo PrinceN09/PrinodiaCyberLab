@@ -31,7 +31,7 @@ export const DEFAULT_FILTERS: FilterState = {
   source: "",
   salaryMin: "",
   days: String(JOB_MAX_AGE_DAYS),
-  sort: "priority",
+  sort: "match",
 };
 
 const PROVINCES = ["BC", "AB", "SK", "MB", "ON", "QC", "NS", "NB", "PE", "NL"];
@@ -164,9 +164,11 @@ export function JobFilters({
         onChange={(e) => set("sort", e.target.value)}
         className="!h-9 !text-xs"
       >
+        <option value="match">Sort: best match</option>
         <option value="priority">Sort: location priority</option>
         <option value="recent">Sort: most recent</option>
         <option value="salary">Sort: salary</option>
+        <option value="gaps">Sort: fewest missing skills</option>
       </Select>
     </>
   );

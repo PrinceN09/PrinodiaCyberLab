@@ -6,14 +6,17 @@
  *   npx tsx scripts/ingest-jobs.ts --source lever --identifier leverdemo
  *   npx tsx scripts/ingest-jobs.ts --dry-run             # no writes at all
  *   npx tsx scripts/ingest-jobs.ts --days 14             # widen the window (testing)
+ *   npx tsx scripts/ingest-jobs.ts --no-match            # skip match recomputation
  *
  * Exit code 1 if any configured source FAILED.
  */
 import type { JobSourceType } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
+import { getCurrentUser } from "../src/lib/current-user";
 import { registerAllProviders } from "../src/lib/jobs/providers";
 import { runIngestion } from "../src/lib/jobs/pipeline";
 import { PrismaIngestionStore } from "../src/lib/jobs/store";
+import { recomputeMatches } from "../src/lib/jobs/matching-service";
 
 const SOURCE_ALIASES: Record<string, JobSourceType> = {
   greenhouse: "GREENHOUSE",
@@ -86,8 +89,20 @@ async function main() {
   }
   console.log(
     `\nArchived ${summary.archived} expired unsaved posting(s)` +
-      `${dryRun ? " (would archive)" : ""}.\n`
+      `${dryRun ? " (would archive)" : ""}.`
   );
+
+  // Recompute match scores so fresh postings are ranked immediately.
+  if (!dryRun && !process.argv.includes("--no-match")) {
+    const user = await getCurrentUser();
+    const match = await recomputeMatches(user.id);
+    console.log(
+      `Match scores: ${match.scored} scored, ${match.ineligible} ineligible ` +
+        `across ${match.postings} active posting(s) in ${match.durationMs}ms.\n`
+    );
+  } else {
+    console.log("");
+  }
 
   if (summary.configs.some((c) => c.status === "FAILED")) {
     process.exitCode = 1;

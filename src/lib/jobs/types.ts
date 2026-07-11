@@ -55,6 +55,11 @@ export type RawJobInput = {
 export type FetchContext = {
   /** Only jobs at/after this instant are of interest (7-day window). */
   since: Date;
+  /**
+   * Display label from JobSourceConfig — used as the company name by
+   * providers whose APIs don't return one (e.g. Lever).
+   */
+  sourceLabel?: string;
   signal?: AbortSignal;
   log: (message: string) => void;
 };

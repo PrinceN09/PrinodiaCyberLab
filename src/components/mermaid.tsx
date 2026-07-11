@@ -12,7 +12,13 @@ export function MermaidRender({ code }: { code: string }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const mermaid = (await import("mermaid")).default;
+      // Import the self-contained ESM bundle: the default "mermaid"
+      // entry resolves to mermaid.core.mjs, whose externalized deps
+      // (d3, dompurify, …) can fail webpack's browser interop with
+      // "Cannot read properties of undefined (reading 'split')".
+      // The .esm.min bundle ships all deps inside one module.
+      const mermaid = (await import("mermaid/dist/mermaid.esm.min.mjs"))
+        .default;
       const dark = theme === "dark";
       mermaid.initialize({
         startOnLoad: false,

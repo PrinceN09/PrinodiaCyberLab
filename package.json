@@ -15,6 +15,8 @@
     "db:seed": "prisma db seed",
     "db:seed:snippets": "tsx prisma/seed-snippets.ts",
     "db:seed:skills": "tsx prisma/seed-skills.ts",
+    "jobs:ingest": "tsx scripts/ingest-jobs.ts",
+    "jobs:sources": "tsx scripts/manage-sources.ts",
     "db:studio": "prisma studio"
   },
   "prisma": {

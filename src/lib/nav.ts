@@ -18,6 +18,7 @@ import {
   Linkedin,
   Mail,
   Briefcase,
+  Compass,
   MessagesSquare,
   FolderGit2,
   GraduationCap,
@@ -84,6 +85,7 @@ export const NAV: NavSection[] = [
     label: "Career Center",
     icon: Briefcase,
     children: [
+      { href: "/jobs", label: "Job Discovery", icon: Compass },
       { href: "/career/resume", label: "Resume Builder", icon: FileText },
       { href: "/career/linkedin", label: "LinkedIn Optimization", icon: Linkedin },
       { href: "/career/cover-letters", label: "Cover Letters", icon: Mail },

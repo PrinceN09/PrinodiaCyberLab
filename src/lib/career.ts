@@ -19,6 +19,31 @@ export const RESUME_ROLES = [
   "DevSecOps",
 ] as const;
 
-export function jobStatusMeta(value: string) {
-  return JOB_STATUSES.find((s) => s.value === value) ?? JOB_STATUSES[0];
+/**
+ * Full application-lifecycle metadata (all 13 statuses). The
+ * five-column tracker board still uses JOB_STATUSES; the full
+ * board upgrade lands with the application-tracker phase.
+ */
+export const JOB_STATUS_META: Record<string, { label: string; tone: Tone }> = {
+  DISCOVERED: { label: "Discovered", tone: "gray" },
+  SAVED: { label: "Saved", tone: "gray" },
+  PREPARING: { label: "Preparing", tone: "cyan" },
+  READY_TO_APPLY: { label: "Ready to apply", tone: "teal" },
+  APPLIED: { label: "Applied", tone: "blue" },
+  RECRUITER_CONTACT: { label: "Recruiter contact", tone: "cyan" },
+  ASSESSMENT: { label: "Assessment", tone: "yellow" },
+  INTERVIEW: { label: "Interview", tone: "purple" },
+  FINAL_INTERVIEW: { label: "Final interview", tone: "purple" },
+  OFFER: { label: "Offer", tone: "green" },
+  REJECTED: { label: "Rejected", tone: "red" },
+  WITHDRAWN: { label: "Withdrawn", tone: "gray" },
+  ARCHIVED: { label: "Archived", tone: "gray" },
+};
+
+export function jobStatusMeta(value: string): { label: string; tone: Tone } {
+  return (
+    JOB_STATUS_META[value] ??
+    JOB_STATUSES.find((s) => s.value === value) ??
+    JOB_STATUSES[0]
+  );
 }

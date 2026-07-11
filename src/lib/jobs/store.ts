@@ -19,19 +19,9 @@ function asJson(value: unknown): Prisma.InputJsonValue | undefined {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
-/**
- * Prisma filter for "appears in active job discovery". Mirrors
- * eligibility.isDiscoverable exactly — retained-but-ineligible
- * postings (saved/applied) never surface here.
- */
-export const DISCOVERABLE_WHERE = {
-  isActive: true,
-  locationPriority: { lt: 99 },
-  acceptsCanadianApplicants: true,
-  requiresUSResidency: false,
-  requiresCitizenship: false,
-  requiresSecurityClearance: false,
-} satisfies Prisma.JobPostingWhereInput;
+// The canonical discovery filter lives in discovery.ts (prisma-free
+// import graph for tests); re-exported here for existing callers.
+export { DISCOVERABLE_WHERE } from "./discovery";
 
 export class PrismaIngestionStore implements IngestionStore {
   async listConfigs(filter: {

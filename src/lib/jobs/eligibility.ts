@@ -170,6 +170,32 @@ export function evaluateEligibility(
 }
 
 /**
+ * Canonical "appears in active job discovery" predicate. A posting
+ * can be active-but-ineligible (saved/applied jobs are retained for
+ * historical tracking after turning US-only, gaining citizenship or
+ * clearance requirements, …) — those must never surface in discovery.
+ * The dashboard's Prisma filter (DISCOVERABLE_WHERE in store.ts)
+ * mirrors this exactly.
+ */
+export function isDiscoverable(posting: {
+  isActive: boolean;
+  locationPriority: number;
+  acceptsCanadianApplicants: boolean;
+  requiresUSResidency: boolean;
+  requiresCitizenship: boolean;
+  requiresSecurityClearance: boolean;
+}): boolean {
+  return (
+    posting.isActive &&
+    posting.locationPriority < 99 &&
+    posting.acceptsCanadianApplicants &&
+    !posting.requiresUSResidency &&
+    !posting.requiresCitizenship &&
+    !posting.requiresSecurityClearance
+  );
+}
+
+/**
  * Archival check for the scheduled cleanup job: postings past the
  * seven-day window are archived unless saved or applied.
  */

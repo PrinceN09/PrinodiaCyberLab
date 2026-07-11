@@ -122,6 +122,11 @@ export interface IngestionStore {
     at: Date
   ): Promise<string>;
 
+  /** True when any JobApplication links to this posting (saved/applied). */
+  hasApplications(postingId: string): Promise<boolean>;
+  /** Immediate archival of a posting that turned ineligible. */
+  deactivatePosting(postingId: string, at: Date): Promise<void>;
+
   /**
    * Archives active postings past the age window (or past expiresAt)
    * that have NO linked application (saved/applied jobs are retained).
@@ -150,6 +155,8 @@ export type ConfigRunSummary = {
   merged: number;
   skipped: number;
   failed: number;
+  /** Existing postings archived mid-run after turning ineligible. */
+  deactivated: number;
   skippedReasons: Record<string, number>;
   error?: string;
   log: string[];
@@ -274,18 +281,37 @@ async function ingestOne(
   store: IngestionStore,
   dryRun: boolean,
   now: Date
-): Promise<{ action: ItemAction; reason?: string }> {
+): Promise<{ action: ItemAction; reason?: string; deactivated?: boolean }> {
   // Idempotency: seen this exact source before → refresh & verify.
   const existing = await store.findSource(job.sourceType, job.sourceUrl);
   if (existing) {
+    const verdict = evaluateEligibility(job, { firstSeenAt: now, now });
     if (!dryRun) {
-      const verdict = evaluateEligibility(job, { firstSeenAt: now, now });
       await store.touchSource(existing.id, job.raw, now);
+      // Refresh always writes current eligibility flags + priority, so
+      // a retained-but-ineligible posting is flagged and hidden from
+      // discovery (isDiscoverable / DISCOVERABLE_WHERE).
       await store.refreshPosting(
         existing.jobPostingId,
         postingFields(job, verdict.locationPriority),
         now
       );
+    }
+    if (!verdict.eligible) {
+      // The posting turned ineligible (US-only, citizenship,
+      // clearance, …). Archive immediately — unless it's saved or
+      // applied, in which case it's retained for historical tracking.
+      const saved = await store.hasApplications(existing.jobPostingId);
+      if (!saved) {
+        if (!dryRun) {
+          await store.deactivatePosting(existing.jobPostingId, now);
+        }
+        return {
+          action: "updated",
+          deactivated: true,
+          reason: verdict.reasons[0] ?? "Turned ineligible",
+        };
+      }
     }
     return { action: "updated" };
   }
@@ -337,6 +363,7 @@ async function runConfig(
     merged: 0,
     skipped: 0,
     failed: 0,
+    deactivated: 0,
     skippedReasons: {},
     log: [],
   };
@@ -356,12 +383,21 @@ async function runConfig(
     for (const raw of raws) {
       try {
         const job = normalizeJob(raw);
-        const { action, reason } = await ingestOne(job, store, dryRun, now);
+        const { action, reason, deactivated } = await ingestOne(
+          job,
+          store,
+          dryRun,
+          now
+        );
         if (action === "created") summary.created += 1;
         else if (action === "updated") summary.updated += 1;
         else if (action === "merged") summary.merged += 1;
         else summary.skipped += 1;
-        if (reason) {
+        if (deactivated) {
+          summary.deactivated += 1;
+          log(`deactivated (${reason}): ${raw.sourceUrl}`);
+        }
+        if (reason && !deactivated) {
           summary.skippedReasons[reason] =
             (summary.skippedReasons[reason] ?? 0) + 1;
         }
@@ -387,7 +423,7 @@ async function runConfig(
       jobsFound: summary.found,
       jobsCreated: summary.created,
       jobsUpdated: summary.updated + summary.merged,
-      jobsArchived: 0,
+      jobsArchived: summary.deactivated,
       error: summary.error ?? null,
       details: { log: summary.log, skippedReasons: summary.skippedReasons },
     });
@@ -451,6 +487,7 @@ export async function runIngestion(
         merged: 0,
         skipped: 0,
         failed: 0,
+        deactivated: 0,
         skippedReasons: {},
         log: [
           `${config.sourceType} is unofficial and disabled — see provider complianceNote and env flags`,
@@ -514,6 +551,7 @@ async function runConfigUnavailable(
     merged: 0,
     skipped: 0,
     failed: 0,
+    deactivated: 0,
     skippedReasons: {},
     error,
     log: [error],

@@ -75,6 +75,7 @@ async function main() {
         `updated ${String(c.updated).padStart(3)}`,
         `merged ${String(c.merged).padStart(3)}`,
         `skipped ${String(c.skipped).padStart(3)}`,
+        c.deactivated ? `deactivated ${c.deactivated}` : "",
         c.failed ? `FAILED ITEMS ${c.failed}` : "",
         c.error ? `← ${c.error}` : "",
       ].join("  ")

@@ -19,6 +19,20 @@ function asJson(value: unknown): Prisma.InputJsonValue | undefined {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
+/**
+ * Prisma filter for "appears in active job discovery". Mirrors
+ * eligibility.isDiscoverable exactly — retained-but-ineligible
+ * postings (saved/applied) never surface here.
+ */
+export const DISCOVERABLE_WHERE = {
+  isActive: true,
+  locationPriority: { lt: 99 },
+  acceptsCanadianApplicants: true,
+  requiresUSResidency: false,
+  requiresCitizenship: false,
+  requiresSecurityClearance: false,
+} satisfies Prisma.JobPostingWhereInput;
+
 export class PrismaIngestionStore implements IngestionStore {
   async listConfigs(filter: {
     sourceType?: JobSourceType;
@@ -203,6 +217,20 @@ export class PrismaIngestionStore implements IngestionStore {
       select: { id: true },
     });
     return posting.id;
+  }
+
+  async hasApplications(postingId: string): Promise<boolean> {
+    const count = await prisma.jobApplication.count({
+      where: { jobPostingId: postingId },
+    });
+    return count > 0;
+  }
+
+  async deactivatePosting(postingId: string, at: Date): Promise<void> {
+    await prisma.jobPosting.update({
+      where: { id: postingId },
+      data: { isActive: false, archivedAt: at },
+    });
   }
 
   async archiveExpired(opts: {

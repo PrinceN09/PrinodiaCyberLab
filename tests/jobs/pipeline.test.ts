@@ -10,6 +10,7 @@ import {
   type SourceWriteFields,
 } from "@/lib/jobs/pipeline";
 import type { JobSourceProvider, RawJobInput } from "@/lib/jobs/types";
+import { isDiscoverable } from "@/lib/jobs/eligibility";
 
 const NOW = new Date("2026-07-10T12:00:00Z");
 const daysAgo = (n: number) =>
@@ -175,6 +176,17 @@ class InMemoryStore implements IngestionStore {
       lastSeenAt: at,
     });
     return posting.id;
+  }
+
+  async hasApplications(postingId: string) {
+    return this.applications.has(postingId);
+  }
+
+  async deactivatePosting(postingId: string, at: Date) {
+    this.writes++;
+    const p = this.postings.find((x) => x.id === postingId)!;
+    p.isActive = false;
+    p.archivedAt = at;
   }
 
   async archiveExpired(opts: { cutoff: Date; now: Date; countOnly: boolean }) {
@@ -498,6 +510,134 @@ describe("ingestion pipeline", () => {
     expect(summary.configs[0].error).toMatch(/No provider/);
     expect(store.runs).toHaveLength(1);
     expect(store.runs[0].status).toBe("FAILED");
+  });
+});
+
+describe("postings that turn ineligible on refresh", () => {
+  /**
+   * Runs ingestion twice against the same sourceUrl: first with an
+   * eligible Canadian description, then with `secondDescription`.
+   */
+  async function refreshScenario(
+    secondDescription: string,
+    { saved = false }: { saved?: boolean } = {}
+  ) {
+    const store = new InMemoryStore();
+    store.configs = [config("GREENHOUSE", "acme")];
+    const url = "https://boards.greenhouse.io/acme/jobs/1";
+
+    const firstJobs = [
+      rawJob({ sourceType: "GREENHOUSE", sourceUrl: url, sourceJobId: "1" }),
+    ];
+    await runIngestion(
+      {},
+      deps(store, { GREENHOUSE: provider("GREENHOUSE", firstJobs) })
+    );
+    expect(store.postings).toHaveLength(1);
+    expect(store.postings[0].isActive).toBe(true);
+    if (saved) store.applications.add(store.postings[0].id);
+
+    const secondJobs = [
+      rawJob({
+        sourceType: "GREENHOUSE",
+        sourceUrl: url,
+        sourceJobId: "1",
+        descriptionText: secondDescription,
+        postedAt: daysAgo(2),
+      }),
+    ];
+    const summary = await runIngestion(
+      {},
+      deps(store, { GREENHOUSE: provider("GREENHOUSE", secondJobs) })
+    );
+    return { store, summary, posting: store.postings[0] };
+  }
+
+  it("archives an eligible Canada job that becomes US-only (unsaved)", async () => {
+    const { summary, posting } = await refreshScenario(
+      "Full-time SOC role. Remote (US only). Applicants must reside in the United States."
+    );
+    expect(summary.configs[0].deactivated).toBe(1);
+    expect(posting.isActive).toBe(false);
+    expect(posting.archivedAt).toEqual(NOW);
+    expect(posting.requiresUSResidency).toBe(true);
+    expect(isDiscoverable(posting)).toBe(false);
+  });
+
+  it("archives a job that gains a US citizenship requirement (unsaved)", async () => {
+    const { summary, posting } = await refreshScenario(
+      "Full-time SOC role in Vancouver. US citizenship required for this position."
+    );
+    expect(summary.configs[0].deactivated).toBe(1);
+    expect(posting.isActive).toBe(false);
+    expect(posting.requiresCitizenship).toBe(true);
+    expect(isDiscoverable(posting)).toBe(false);
+  });
+
+  it("archives a job that gains an incompatible clearance requirement (unsaved)", async () => {
+    const { summary, posting } = await refreshScenario(
+      "Full-time SOC role in Vancouver. Active TS/SCI clearance required."
+    );
+    expect(summary.configs[0].deactivated).toBe(1);
+    expect(posting.isActive).toBe(false);
+    expect(posting.requiresSecurityClearance).toBe(true);
+    expect(isDiscoverable(posting)).toBe(false);
+  });
+
+  it("retains saved/applied ineligible jobs but hides them from discovery", async () => {
+    const { summary, posting } = await refreshScenario(
+      "Full-time SOC role. Remote (US only). Applicants must reside in the United States.",
+      { saved: true }
+    );
+    // Retained for historical tracking…
+    expect(summary.configs[0].deactivated).toBe(0);
+    expect(posting.isActive).toBe(true);
+    expect(posting.archivedAt).toBeNull();
+    // …but flagged ineligible and invisible to active discovery.
+    expect(posting.requiresUSResidency).toBe(true);
+    expect(posting.locationPriority).toBe(99);
+    expect(isDiscoverable(posting)).toBe(false);
+  });
+
+  it("keeps eligible refreshes active and discoverable (control)", async () => {
+    const { summary, posting } = await refreshScenario(
+      "Full-time permanent SOC role in Vancouver. Monitor Splunk SIEM alerts."
+    );
+    expect(summary.configs[0].deactivated).toBe(0);
+    expect(posting.isActive).toBe(true);
+    expect(isDiscoverable(posting)).toBe(true);
+  });
+
+  it("dry-run reports the would-be deactivation without writing", async () => {
+    const store = new InMemoryStore();
+    store.configs = [config("GREENHOUSE", "acme")];
+    const url = "https://g/1";
+    await runIngestion(
+      {},
+      deps(store, {
+        GREENHOUSE: provider("GREENHOUSE", [
+          rawJob({ sourceType: "GREENHOUSE", sourceUrl: url }),
+        ]),
+      })
+    );
+    const writesBefore = store.writes;
+
+    const summary = await runIngestion(
+      { dryRun: true },
+      deps(store, {
+        GREENHOUSE: provider("GREENHOUSE", [
+          rawJob({
+            sourceType: "GREENHOUSE",
+            sourceUrl: url,
+            descriptionText: "Remote (US only). Must reside in the United States.",
+          }),
+        ]),
+      })
+    );
+
+    expect(summary.configs[0].deactivated).toBe(1);
+    expect(store.writes).toBe(writesBefore); // nothing written
+    expect(store.postings[0].isActive).toBe(true); // unchanged
   });
 });
 

@@ -83,7 +83,7 @@ active section stays open as you navigate.
 ## Getting started
 
 Run these from the project root
-(`/Users/princentunka/Documents/Projects/PrinodiaCyberLab`).
+(`PrinodiaCyberLab`).
 
 ### 0. Clean any partial dependencies (first setup only)
 
@@ -140,8 +140,8 @@ resources, and a week of study logs — plus the demo user account.
 The seed prints your sign-in credentials at the end:
 
 ```
-Email:    princentunka09@gmail.com
-Password: CyberLab2026!
+Email:    prenodiacyber@gmail.com
+Password: example!212
 ```
 
 ## Authentication

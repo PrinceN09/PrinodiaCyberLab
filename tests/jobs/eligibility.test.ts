@@ -8,6 +8,10 @@ import {
   locationPriority,
   shouldArchive,
 } from "@/lib/jobs/eligibility";
+import {
+  defaultJobPreferences,
+  type JobPreferences,
+} from "@/lib/jobs/preferences";
 
 const NOW = new Date("2026-07-10T12:00:00Z");
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000);
@@ -112,33 +116,18 @@ describe("citizenship & clearance detection", () => {
   });
 });
 
-describe("location prioritization (1–7)", () => {
-  const loc = (over: Partial<TestJob>) =>
-    locationPriority({ ...baseJob, ...over });
+describe("location prioritization (Canada-wide relocation profile)", () => {
+  const loc = (over: Partial<TestJob>, prefs?: JobPreferences) =>
+    locationPriority({ ...baseJob, ...over }, prefs);
 
-  it("1: Vancouver, BC", () => {
-    expect(loc({})).toBe(1);
-  });
-
-  it("2: Metro Vancouver (Burnaby)", () => {
-    expect(loc({ city: "Burnaby" })).toBe(2);
-  });
-
-  it("3: elsewhere in BC (Victoria)", () => {
-    expect(loc({ city: "Victoria" })).toBe(3);
-  });
-
-  it("4: remote within Canada", () => {
+  it("1: remote anywhere in Canada is the top priority", () => {
     expect(
       loc({ city: null, province: null, workplaceType: "REMOTE" })
-    ).toBe(4);
+    ).toBe(1);
+    expect(loc({ city: "Toronto", province: "ON", workplaceType: "REMOTE" })).toBe(1);
   });
 
-  it("5: on-site elsewhere in Canada (Toronto)", () => {
-    expect(loc({ city: "Toronto", province: "ON" })).toBe(5);
-  });
-
-  it("6: remote open to Canada and the US", () => {
+  it("2: remote explicitly open to both Canada and the US", () => {
     expect(
       loc({
         city: null,
@@ -147,19 +136,73 @@ describe("location prioritization (1–7)", () => {
         workplaceType: "REMOTE",
         description: "Fully remote, open to candidates in Canada and the US.",
       })
-    ).toBe(6);
+    ).toBe(2);
   });
 
-  it("7: US remote explicitly accepting Canadian applicants", () => {
+  it("3: Vancouver and Metro Vancouver on-site/hybrid", () => {
+    expect(loc({})).toBe(3); // Vancouver on-site
+    expect(loc({ city: "Burnaby", workplaceType: "HYBRID" })).toBe(3);
+  });
+
+  it("4: elsewhere in BC hybrid/on-site (Victoria)", () => {
+    expect(loc({ city: "Victoria" })).toBe(4);
+  });
+
+  it("5: Toronto on-site is visible via relocation", () => {
+    expect(loc({ city: "Toronto", province: "ON" })).toBe(5);
+  });
+
+  it("5: Ottawa hybrid is visible via relocation", () => {
+    expect(
+      loc({ city: "Ottawa", province: "ON", workplaceType: "HYBRID" })
+    ).toBe(5);
+  });
+
+  it("5: Canadian roles outside BC are never rejected for being outside Vancouver", () => {
+    for (const [city, province] of [
+      ["Montreal", "QC"],
+      ["Calgary", "AB"],
+      ["Halifax", "NS"],
+      ["Winnipeg", "MB"],
+    ] as const) {
+      expect(loc({ city, province })).toBe(5);
+    }
+  });
+
+  it("6: remote North America roles that explicitly include Canada", () => {
     expect(
       loc({
         city: null,
         province: null,
-        country: "United States",
+        country: null,
         workplaceType: "REMOTE",
-        description: "US remote; we also accept applicants located in Canada.",
+        description: "Remote across North America. Canadian applicants welcome.",
+      })
+    ).toBe(6);
+  });
+
+  it("7: Canada mentioned but low-confidence → manual review", () => {
+    expect(
+      loc({
+        city: null,
+        province: null,
+        country: null,
+        workplaceType: "REMOTE",
+        description: "Distributed team. We are Canadian-friendly.",
       })
     ).toBe(7);
+  });
+
+  it("99: North America remote WITHOUT explicit Canada is ambiguous", () => {
+    expect(
+      loc({
+        city: null,
+        province: null,
+        country: null,
+        workplaceType: "REMOTE",
+        description: "Remote anywhere in North America.",
+      })
+    ).toBe(99);
   });
 
   it("99: unknown-location remote with no Canada signal", () => {
@@ -175,6 +218,46 @@ describe("location prioritization (1–7)", () => {
   });
 });
 
+describe("preference-driven location behavior", () => {
+  const loc = (over: Partial<TestJob>, prefs: JobPreferences) =>
+    locationPriority({ ...baseJob, ...over }, prefs);
+
+  it("relocation disabled: rest-of-Canada on-site becomes ineligible, remote Canada unaffected", () => {
+    const prefs = { ...defaultJobPreferences(), willingToRelocate: false };
+    expect(loc({ city: "Toronto", province: "ON" }, prefs)).toBe(99);
+    expect(loc({}, prefs)).toBe(3); // Vancouver stays
+    expect(
+      loc({ city: null, province: null, workplaceType: "REMOTE" }, prefs)
+    ).toBe(1); // remote Canada stays
+  });
+
+  it("remote-US consent disabled: Canada+US remote becomes ineligible", () => {
+    const prefs = {
+      ...defaultJobPreferences(),
+      remoteUSIfCanadaEligible: false,
+    };
+    expect(
+      loc(
+        {
+          city: null,
+          province: null,
+          country: null,
+          workplaceType: "REMOTE",
+          description: "Remote, open to candidates in Canada and the US.",
+        },
+        prefs
+      )
+    ).toBe(99);
+  });
+
+  it("hybrid/on-site toggles gate those arrangements", () => {
+    const noHybrid = { ...defaultJobPreferences(), hybridCanada: false };
+    expect(loc({ workplaceType: "HYBRID" }, noHybrid)).toBe(99);
+    const noOnsite = { ...defaultJobPreferences(), onsiteCanada: false };
+    expect(loc({ workplaceType: "ON_SITE" }, noOnsite)).toBe(99);
+  });
+});
+
 describe("default exclusions", () => {
   const verdictFor = (over: Partial<TestJob>) =>
     evaluateEligibility(
@@ -185,8 +268,43 @@ describe("default exclusions", () => {
   it("accepts the happy-path Vancouver full-time job", () => {
     const v = verdictFor({});
     expect(v.eligible).toBe(true);
-    expect(v.locationPriority).toBe(1);
+    expect(v.locationPriority).toBe(3); // Vancouver on-site
     expect(v.reasons).toHaveLength(0);
+  });
+
+  it("accepts an on-site Toronto job (relocation enabled)", () => {
+    const v = verdictFor({ city: "Toronto", province: "ON" });
+    expect(v.eligible).toBe(true);
+    expect(v.locationPriority).toBe(5);
+  });
+
+  it("excludes contract roles under the full-time-only default", () => {
+    const v = verdictFor({ employmentType: "CONTRACT" as TestJob["employmentType"] });
+    expect(v.eligible).toBe(false);
+    expect(v.reasons.join(" ")).toMatch(/contract/i);
+  });
+
+  it("marks ambiguous North America listings with an explicit reason", () => {
+    const v = verdictFor({
+      city: null,
+      province: null,
+      country: null,
+      workplaceType: "REMOTE",
+      description: "Remote anywhere in North America.",
+    });
+    expect(v.eligible).toBe(false);
+    expect(v.locationPriority).toBe(99);
+    expect(v.reasons.join(" ")).toMatch(/ambiguous/i);
+  });
+
+  it("narrows the age window when preferences ask for fresher jobs", () => {
+    const prefs = { ...defaultJobPreferences(), maxJobAgeDays: 3 };
+    const v = evaluateEligibility(
+      { ...baseJob, sourcePostedAt: daysAgo(5) },
+      { now: NOW, firstSeenAt: daysAgo(1), prefs }
+    );
+    expect(v.eligible).toBe(false);
+    expect(v.reasons).toContain("Older than 3 days");
   });
 
   it("excludes internships", () => {

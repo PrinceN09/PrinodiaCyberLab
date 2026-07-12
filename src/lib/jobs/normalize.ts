@@ -97,6 +97,28 @@ const PROVINCES: Record<string, string> = {
 const US_STATE_HINT =
   /\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/;
 
+/**
+ * Well-known Canadian cities → province, so "Toronto" alone resolves
+ * to ON/Canada. Critical for Canada-wide relocation eligibility:
+ * an Ottawa or Calgary posting must not fail location parsing.
+ */
+export const CANADIAN_CITY_PROVINCE: Record<string, string> = {
+  vancouver: "BC", burnaby: "BC", richmond: "BC", surrey: "BC",
+  coquitlam: "BC", "north vancouver": "BC", "west vancouver": "BC",
+  "new westminster": "BC", delta: "BC", langley: "BC", victoria: "BC",
+  kelowna: "BC", kamloops: "BC", nanaimo: "BC", abbotsford: "BC",
+  toronto: "ON", ottawa: "ON", mississauga: "ON", brampton: "ON",
+  hamilton: "ON", london: "ON", markham: "ON", waterloo: "ON",
+  kitchener: "ON", "guelph": "ON", "north york": "ON", scarborough: "ON",
+  montreal: "QC", "montréal": "QC", "quebec city": "QC", laval: "QC",
+  gatineau: "QC",
+  calgary: "AB", edmonton: "AB", "red deer": "AB",
+  winnipeg: "MB", saskatoon: "SK", regina: "SK",
+  halifax: "NS", moncton: "NB", fredericton: "NB", "saint john": "NB",
+  charlottetown: "PE", "st. john's": "NL",
+  whitehorse: "YT", yellowknife: "NT", iqaluit: "NU",
+};
+
 export type ParsedLocation = {
   city: string | null;
   province: string | null;
@@ -131,13 +153,27 @@ export function parseLocation(location: string | null | undefined): ParsedLocati
   const segments = text.split(/[,•|/]/).map((s) => s.trim()).filter(Boolean);
   let city: string | null = null;
   for (const seg of segments) {
-    const segLower = seg.toLowerCase();
+    // Drop parenthetical qualifiers: "Ottawa (Hybrid)" → "Ottawa".
+    const cleaned = seg.replace(/\(.*?\)/g, "").trim();
+    const segLower = cleaned.toLowerCase();
     if (/remote|hybrid|on-?site|anywhere/.test(segLower)) continue;
     if (segLower === "canada" || segLower === "usa" || segLower === "united states") continue;
-    if (PROVINCES[segLower] || Object.values(PROVINCES).includes(seg.toUpperCase())) continue;
-    if (seg.length < 2 || seg.length > 40) continue;
-    city = seg;
+    if (PROVINCES[segLower] || Object.values(PROVINCES).includes(cleaned.toUpperCase())) continue;
+    if (cleaned.length < 2 || cleaned.length > 40) continue;
+    city = cleaned;
     break;
+  }
+
+  // Infer province/country from well-known Canadian cities so
+  // Canada-wide relocation targets don't fail parsing.
+  if (city && !province) {
+    const inferred = CANADIAN_CITY_PROVINCE[city.toLowerCase()];
+    // Ambiguity guard: US context wins for shared names (London, ON
+    // vs London, KY) when a US signal is present.
+    if (inferred && country !== "United States") {
+      province = inferred;
+      country = "Canada";
+    }
   }
 
   return { city, province, country };

@@ -17,6 +17,7 @@ import { registerAllProviders } from "../src/lib/jobs/providers";
 import { runIngestion } from "../src/lib/jobs/pipeline";
 import { PrismaIngestionStore } from "../src/lib/jobs/store";
 import { recomputeMatches } from "../src/lib/jobs/matching-service";
+import { getJobPreferences } from "../src/lib/jobs/preferences-service";
 
 const SOURCE_ALIASES: Record<string, JobSourceType> = {
   greenhouse: "GREENHOUSE",
@@ -46,6 +47,8 @@ async function main() {
   const days = flag("--days") ? Number(flag("--days")) : undefined;
 
   registerAllProviders();
+  const user = await getCurrentUser();
+  const preferences = await getJobPreferences(user.id);
   const summary = await runIngestion(
     {
       sourceType,
@@ -53,7 +56,7 @@ async function main() {
       dryRun,
       maxAgeDays: days,
     },
-    { store: new PrismaIngestionStore() }
+    { store: new PrismaIngestionStore(), preferences }
   );
 
   if (summary.configs.length === 0) {
@@ -92,14 +95,21 @@ async function main() {
       `${dryRun ? " (would archive)" : ""}.`
   );
 
-  // Recompute match scores so fresh postings are ranked immediately.
-  if (!dryRun && !process.argv.includes("--no-match")) {
-    const user = await getCurrentUser();
-    const match = await recomputeMatches(user.id);
+  // Incremental match recomputation: only postings that were created,
+  // merged, or materially changed this run. Timestamp-only refreshes
+  // are skipped entirely.
+  if (
+    !dryRun &&
+    !process.argv.includes("--no-match") &&
+    summary.changedPostingIds.length > 0
+  ) {
+    const match = await recomputeMatches(user.id, summary.changedPostingIds);
     console.log(
-      `Match scores: ${match.scored} scored, ${match.ineligible} ineligible ` +
-        `across ${match.postings} active posting(s) in ${match.durationMs}ms.\n`
+      `Match scores (incremental): ${summary.changedPostingIds.length} changed posting(s) → ` +
+        `${match.scored} scored, ${match.ineligible} ineligible in ${match.durationMs}ms.\n`
     );
+  } else if (!dryRun) {
+    console.log("Match scores: no material changes — recomputation skipped.\n");
   } else {
     console.log("");
   }

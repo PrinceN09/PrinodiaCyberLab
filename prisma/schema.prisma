@@ -43,6 +43,7 @@ model User {
   iocs             Ioc[]
   userSkills       UserSkill[]
   certifications   Certification[]
+  jobSearchPreference JobSearchPreference?
   portfolioRepos   PortfolioRepo[]
   labs             Lab[]
   cyberProjects    CybersecurityProject[]
@@ -1102,6 +1103,33 @@ model Notification {
   createdAt    DateTime         @default(now())
 
   @@index([userId, createdAt])
+}
+
+/// Per-user job-search preferences. Eligibility, priority ranking,
+/// and match scoring consume these — never hard-coded values.
+/// Defaults mirror DEFAULT_JOB_PREFERENCES in lib/jobs/preferences.ts.
+model JobSearchPreference {
+  id                       String              @id @default(cuid())
+  userId                   String              @unique
+  user                     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  homeCity                 String              @default("Vancouver")
+  homeProvince             String              @default("BC")
+  homeCountry              String              @default("Canada")
+  willingToRelocate        Boolean             @default(true)
+  relocationCountries      String[]            @default(["Canada"])
+  preferredCountries       String[]            @default(["Canada"])
+  remoteCanada             Boolean             @default(true)
+  remoteUSIfCanadaEligible Boolean             @default(true)
+  hybridCanada             Boolean             @default(true)
+  onsiteCanada             Boolean             @default(true)
+  employmentTypes          JobEmploymentType[] @default([FULL_TIME])
+  permanentPreferred       Boolean             @default(true)
+  maxJobAgeDays            Int                 @default(7)
+  minimumMatchScore        Int                 @default(0)
+  /// Validated WorkplaceZoneKey[] (see lib/jobs/preferences.ts)
+  preferredWorkplaceOrder  Json?
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
 }
 
 model NotificationRule {

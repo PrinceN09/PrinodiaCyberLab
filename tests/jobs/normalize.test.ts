@@ -75,6 +75,29 @@ describe("location parsing", () => {
   it("detects US locations", () => {
     expect(parseLocation("Austin, TX").country).toBe("United States");
   });
+
+  it("infers province and country for well-known Canadian cities", () => {
+    expect(parseLocation("Toronto")).toEqual({
+      city: "Toronto",
+      province: "ON",
+      country: "Canada",
+    });
+    expect(parseLocation("Ottawa (Hybrid)")).toEqual({
+      city: "Ottawa",
+      province: "ON",
+      country: "Canada",
+    });
+    expect(parseLocation("Calgary").province).toBe("AB");
+    expect(parseLocation("Halifax").province).toBe("NS");
+    expect(parseLocation("Kelowna").province).toBe("BC");
+  });
+
+  it("does not infer Canada when the US context is explicit", () => {
+    // London, KY vs London, ON — a US signal wins.
+    expect(parseLocation("London, United States").country).toBe(
+      "United States"
+    );
+  });
 });
 
 describe("remote classification", () => {

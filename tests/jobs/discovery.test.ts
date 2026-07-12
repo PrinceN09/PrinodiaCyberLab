@@ -176,9 +176,47 @@ describe("display helpers", () => {
     expect(formatSalary(null, 45, "CAD", "HOUR")).toBe("CAD 45/hr");
     expect(formatSalary(null, null, null, null)).toBeNull();
   });
-  it("labels location priorities", () => {
-    expect(locationPriorityLabel(1)).toBe("Vancouver, BC");
-    expect(locationPriorityLabel(4)).toBe("Remote — Canada");
+  it("labels location priorities per the relocation-aware ranking", () => {
+    expect(locationPriorityLabel(1)).toBe("Remote — Canada");
+    expect(locationPriorityLabel(2)).toBe("Remote — Canada & US");
+    expect(locationPriorityLabel(3)).toBe("Vancouver / Metro Vancouver");
+    expect(locationPriorityLabel(5)).toBe("Canada — relocation");
     expect(locationPriorityLabel(42)).toBe("Eligibility unclear");
+  });
+});
+
+describe("zone shortcuts — canonical server-side mapping", () => {
+  it("whitelists zone keys", () => {
+    expect(parseJobQuery(params({ zone: "remote-canada" })).zone).toBe(
+      "remote-canada"
+    );
+    expect(parseJobQuery(params({ zone: "hack-the-planet" })).zone).toBeNull();
+  });
+
+  it("maps zones to locationPriority filters on top of DISCOVERABLE_WHERE", () => {
+    const whereFor = (zone: string) =>
+      buildJobWhere(parseJobQuery(params({ zone })), NOW);
+
+    expect(whereFor("remote-canada").AND).toContainEqual({
+      locationPriority: 1,
+    });
+    expect(whereFor("remote-us-canada").AND).toContainEqual({
+      locationPriority: 2,
+    });
+    expect(whereFor("vancouver-bc").AND).toContainEqual({
+      locationPriority: { in: [3, 4] },
+    });
+    expect(whereFor("canada-wide").AND).toContainEqual({
+      locationPriority: { in: [1, 3, 4, 5] },
+    });
+    expect(whereFor("relocation").AND).toContainEqual({
+      locationPriority: 5,
+    });
+    expect(whereFor("stretch").AND).toContainEqual({
+      seniority: { in: ["SENIOR", "LEAD"] },
+    });
+    // The mandatory eligibility filter is still present.
+    expect(whereFor("remote-canada").isActive).toBe(true);
+    expect(whereFor("remote-canada").requiresUSResidency).toBe(false);
   });
 });

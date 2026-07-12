@@ -27,13 +27,13 @@ export const DISCOVERABLE_WHERE = {
 } satisfies Prisma.JobPostingWhereInput;
 
 export const LOCATION_PRIORITY_LABELS: Record<number, string> = {
-  1: "Vancouver, BC",
-  2: "Metro Vancouver",
-  3: "British Columbia",
-  4: "Remote — Canada",
-  5: "Canada",
-  6: "Remote — Canada & US",
-  7: "US remote (Canada eligible)",
+  1: "Remote — Canada",
+  2: "Remote — Canada & US",
+  3: "Vancouver / Metro Vancouver",
+  4: "British Columbia",
+  5: "Canada — relocation",
+  6: "Remote — North America (Canada included)",
+  7: "Canada — verify eligibility",
 };
 
 export function locationPriorityLabel(priority: number): string {
@@ -50,6 +50,54 @@ export const JOB_SORTS = [
   "gaps",
 ] as const;
 export type JobSort = (typeof JOB_SORTS)[number];
+
+/**
+ * Dashboard shortcut zones. Mapped to Prisma filters HERE (server
+ * side, on top of DISCOVERABLE_WHERE) — client components only pass
+ * the validated key, never re-implement eligibility.
+ */
+export const JOB_ZONES = [
+  "recommended",
+  "remote-canada",
+  "remote-us-canada",
+  "vancouver-bc",
+  "canada-wide",
+  "relocation",
+  "stretch",
+] as const;
+export type JobZone = (typeof JOB_ZONES)[number];
+
+export const JOB_ZONE_LABELS: Record<JobZone, string> = {
+  recommended: "Recommended for You",
+  "remote-canada": "Remote Canada",
+  "remote-us-canada": "Remote US/Canada",
+  "vancouver-bc": "Vancouver & BC",
+  "canada-wide": "Canada-Wide",
+  relocation: "Relocation Opportunities",
+  stretch: "Stretch Opportunities",
+};
+
+/** Minimum score for the "Recommended for You" zone. */
+export const RECOMMENDED_MIN_SCORE = 60;
+
+function zoneWhere(zone: JobZone): Prisma.JobPostingWhereInput {
+  switch (zone) {
+    case "recommended":
+      return { matchScore: { gte: RECOMMENDED_MIN_SCORE } };
+    case "remote-canada":
+      return { locationPriority: 1 };
+    case "remote-us-canada":
+      return { locationPriority: 2 };
+    case "vancouver-bc":
+      return { locationPriority: { in: [3, 4] } };
+    case "canada-wide":
+      return { locationPriority: { in: [1, 3, 4, 5] } };
+    case "relocation":
+      return { locationPriority: 5 };
+    case "stretch":
+      return { seniority: { in: ["SENIOR", "LEAD"] } };
+  }
+}
 
 const WORKPLACES: WorkplaceType[] = ["REMOTE", "HYBRID", "ON_SITE", "UNKNOWN"];
 const EMPLOYMENT: JobEmploymentType[] = [
@@ -86,6 +134,7 @@ const MAX_PAGE_SIZE = 50;
 
 export type JobQuery = {
   q: string;
+  zone: JobZone | null;
   workplace: WorkplaceType | null;
   employment: JobEmploymentType | null;
   seniority: SeniorityLevel | null;
@@ -123,6 +172,7 @@ function clampInt(
 export function parseJobQuery(params: ParamsLike): JobQuery {
   return {
     q: (params.get("q") ?? "").trim().slice(0, 120),
+    zone: oneOf(params.get("zone"), JOB_ZONES),
     workplace: oneOf(params.get("workplace"), WORKPLACES),
     employment: oneOf(params.get("employment"), EMPLOYMENT),
     seniority: oneOf(params.get("seniority"), SENIORITIES),
@@ -166,6 +216,7 @@ export function buildJobWhere(
     },
   ];
 
+  if (query.zone) and.push(zoneWhere(query.zone));
   if (query.q) {
     and.push({
       OR: [

@@ -146,8 +146,17 @@ const SENIORITY_SCORES: Record<string, { score: number; note: string }> = {
   LEAD: { score: 2, note: "Lead/management role — beyond current target level" },
 };
 
+/**
+ * Location credit by the new priority ranking. Monotonic so score
+ * order never contradicts priority order:
+ *   1 Remote Canada — full credit
+ *   2 Remote Canada+US — strong credit
+ *   3 Vancouver/Metro — highly relevant, not exclusive
+ *   4 BC · 5 Canada-wide relocation — valid credit
+ *   6 NA-with-Canada · 7 low-confidence — reduced credit
+ */
 const LOCATION_SCORES: Record<number, number> = {
-  1: 15, 2: 14, 3: 12, 4: 12, 5: 9, 6: 8, 7: 7,
+  1: 15, 2: 14, 3: 13, 4: 12, 5: 11, 6: 9, 7: 7,
 };
 
 const CERT_MENTION_RE =

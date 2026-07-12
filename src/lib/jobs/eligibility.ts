@@ -4,6 +4,10 @@
  * location priority ranking. No I/O, fully unit-testable.
  */
 import type { EligibilityVerdict, NormalizedJob } from "./types";
+import {
+  DEFAULT_JOB_PREFERENCES,
+  type JobPreferences,
+} from "./preferences";
 
 export const JOB_MAX_AGE_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -59,7 +63,20 @@ export function detectSecurityClearance(text: string): boolean {
   );
 }
 
-// ── Location priority (spec order 1–7, 99 = ineligible) ──
+// ── Location priority ───────────────────────────
+//
+// Preference-aware ranking (Canada-wide relocation enabled by default):
+//   1  Remote anywhere in Canada
+//   2  Remote explicitly open to both Canada and the US
+//   3  Vancouver / Metro Vancouver (remote, hybrid, or on-site)
+//   4  British Columbia hybrid or on-site
+//   5  Hybrid or on-site anywhere else in Canada (relocation)
+//   6  Remote North America / Americas explicitly including Canada
+//   7  Eligible but lower-confidence Canadian roles (manual review)
+//   99 Ineligible or too ambiguous to confirm Canadian eligibility
+//
+// A Toronto/Ottawa/Calgary/Montreal role is NEVER rejected just
+// because home is Vancouver — relocation makes it priority 5.
 
 const METRO_VANCOUVER_CITIES = new Set([
   "vancouver", "burnaby", "richmond", "surrey", "coquitlam",
@@ -80,34 +97,50 @@ type LocationInput = Pick<
   | "description"
 >;
 
-export function locationPriority(job: LocationInput): number {
+const CANADA_EXPLICIT_RE = /\bcanad(a|ian)s?\b/i;
+const NORTH_AMERICA_RE = /\bnorth america\b|\bamericas\b/i;
+const US_SIGNAL_RE = /\b(us|u\.s\.|usa|united states)\b/i;
+
+export function locationPriority(
+  job: LocationInput,
+  prefs: JobPreferences = DEFAULT_JOB_PREFERENCES
+): number {
+  if (job.requiresUSResidency || !job.acceptsCanadianApplicants) return 99;
+
   const city = job.city?.toLowerCase() ?? null;
   const inCanada = job.country === "Canada" || (!job.country && !!job.province);
   const remote = job.workplaceType === "REMOTE";
 
-  if (job.requiresUSResidency || !job.acceptsCanadianApplicants) return 99;
+  // ── Identifiably located in Canada ──
+  if (inCanada) {
+    if (remote) return prefs.remoteCanada ? 1 : 99;
+    if (job.workplaceType === "HYBRID" && !prefs.hybridCanada) return 99;
+    if (job.workplaceType === "ON_SITE" && !prefs.onsiteCanada) return 99;
 
-  if (city === "vancouver" && job.province === "BC") return 1;
-  if (city && METRO_VANCOUVER_CITIES.has(city) && job.province === "BC") return 2;
-  if (job.province === "BC") return 3;
-  if (remote && inCanada) return 4;
-  if (inCanada) return 5; // hybrid or on-site anywhere in Canada
-
-  const d = job.description.toLowerCase();
-  const mentionsCanada =
-    /\bcanada\b|\bcanadian\b/.test(d) ||
-    job.country === "Canada";
-  if (remote && mentionsCanada) {
-    // 6: remote roles open to both Canada and the US
-    // 7: US remote roles that explicitly accept applicants in Canada
-    const usRemote =
-      job.country === "United States" ||
-      /\b(us|u\.s\.|united states)\b/.test(d);
-    return usRemote && job.country === "United States" ? 7 : 6;
+    const metro =
+      city !== null &&
+      METRO_VANCOUVER_CITIES.has(city) &&
+      job.province === "BC";
+    if (metro) return 3;
+    if (job.province === "BC") return 4;
+    // Elsewhere in Canada: eligible via relocation only.
+    return prefs.willingToRelocate ? 5 : 99;
   }
 
-  // Unknown-location remote with no Canada signal: not eligible enough.
-  return 99;
+  // ── Not identifiably in Canada: remote-only, explicit signals ──
+  if (!remote) return 99;
+  const d = job.description;
+  if (!CANADA_EXPLICIT_RE.test(d)) {
+    // Includes bare "North America"/"Americas" listings: too
+    // ambiguous to confirm Canadian eligibility → never discovered.
+    return 99;
+  }
+  if (US_SIGNAL_RE.test(d) || job.country === "United States") {
+    return prefs.remoteUSIfCanadaEligible ? 2 : 99;
+  }
+  if (NORTH_AMERICA_RE.test(d)) return 6;
+  // Canada is mentioned but location metadata is weak → manual review.
+  return 7;
 }
 
 // ── Default exclusions ──────────────────────────
@@ -126,27 +159,42 @@ type ExclusionInput = Pick<
 > & { sourcePostedAt: Date | null };
 
 /**
- * Applies the spec's default exclusions. Saved/applied jobs are
- * exempted from archival at the persistence layer, not here.
+ * Applies the default exclusions, preference-aware. Saved/applied
+ * jobs are exempted from archival at the persistence layer, not here.
  */
 export function evaluateEligibility(
   job: ExclusionInput,
   {
     firstSeenAt = new Date(),
     now = new Date(),
-  }: { firstSeenAt?: Date; now?: Date } = {}
+    prefs = DEFAULT_JOB_PREFERENCES,
+  }: { firstSeenAt?: Date; now?: Date; prefs?: JobPreferences } = {}
 ): EligibilityVerdict {
   const reasons: string[] = [];
+  // The 7-day rule is a hard cap; preferences may only narrow it.
+  const maxAgeDays = Math.min(prefs.maxJobAgeDays, JOB_MAX_AGE_DAYS);
 
   if (!job.title?.trim() || !job.company?.trim() || !job.sourceUrl?.trim()) {
     reasons.push("Incomplete posting (missing title, company, or URL)");
   }
-  if (!isWithinAgeWindow(job.sourcePostedAt, firstSeenAt, now)) {
-    reasons.push(`Older than ${JOB_MAX_AGE_DAYS} days`);
+  if (!isWithinAgeWindow(job.sourcePostedAt, firstSeenAt, now, maxAgeDays)) {
+    reasons.push(`Older than ${maxAgeDays} days`);
   }
   if (job.employmentType === "INTERNSHIP") reasons.push("Internship");
   if (job.employmentType === "TEMPORARY") reasons.push("Temporary role");
   if (job.employmentType === "COMMISSION") reasons.push("Commission-only");
+  // Preference-driven employment filter (contract-only and part-time
+  // are excluded by the FULL_TIME-only default; UNKNOWN passes).
+  if (
+    (job.employmentType === "CONTRACT" ||
+      job.employmentType === "PART_TIME" ||
+      job.employmentType === "FULL_TIME") &&
+    !prefs.employmentTypes.includes(job.employmentType)
+  ) {
+    reasons.push(
+      `Employment type ${job.employmentType.toLowerCase().replace("_", "-")} is outside your preferences`
+    );
+  }
   if (/\bunpaid\b|\bvolunteer\b/i.test(job.description)) {
     reasons.push("Unpaid position");
   }
@@ -157,9 +205,11 @@ export function evaluateEligibility(
     reasons.push("Cannot employ Canadian residents");
   }
 
-  const priority = locationPriority(job as LocationInput & ExclusionInput);
+  const priority = locationPriority(job as LocationInput & ExclusionInput, prefs);
   if (priority === 99 && reasons.length === 0) {
-    reasons.push("No Canadian location eligibility detected");
+    reasons.push(
+      "Location eligibility is ambiguous — Canadian eligibility could not be confirmed"
+    );
   }
 
   return {

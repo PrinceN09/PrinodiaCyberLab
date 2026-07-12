@@ -12,6 +12,7 @@ import { normalizeJob } from "./normalize";
 import { evaluateEligibility, JOB_MAX_AGE_DAYS } from "./eligibility";
 import { findDuplicate, type DedupCandidate } from "./dedup";
 import { getProvider, isProviderAllowed } from "./registry";
+import { DEFAULT_JOB_PREFERENCES, type JobPreferences } from "./preferences";
 import type { JobSourceProvider, NormalizedJob } from "./types";
 
 // ── Store contract ──────────────────────────────
@@ -95,12 +96,17 @@ export interface IngestionStore {
   ): Promise<{ id: string; jobPostingId: string } | null>;
   /** Refresh a re-seen source: lastSeenAt + raw payload. */
   touchSource(sourceId: string, raw: unknown, at: Date): Promise<void>;
-  /** Refresh mutable posting fields + lastVerifiedAt. */
+  /**
+   * Refresh mutable posting fields + lastVerifiedAt. Reports whether
+   * MATERIAL fields changed (see MATERIAL_FIELDS) so match scores are
+   * only recomputed for real content changes — never for
+   * lastSeenAt/lastVerifiedAt/importedAt-style metadata refreshes.
+   */
   refreshPosting(
     postingId: string,
     fields: PostingWriteFields,
     at: Date
-  ): Promise<void>;
+  ): Promise<{ materialChanged: boolean }>;
 
   /**
    * Dedup candidates: active postings with this normalizedCompany.
@@ -169,12 +175,19 @@ export type IngestionSummary = {
   maxAgeDays: number;
   configs: ConfigRunSummary[];
   archived: number;
+  /**
+   * Postings needing match recomputation: created, merged, or
+   * materially updated. Timestamp-only refreshes are excluded.
+   */
+  changedPostingIds: string[];
 };
 
 export type IngestionDeps = {
   store: IngestionStore;
   resolveProvider?: (t: JobSourceType) => JobSourceProvider | null;
   providerAllowed?: (p: JobSourceProvider) => boolean;
+  /** Job-search preferences driving eligibility (defaults if omitted). */
+  preferences?: JobPreferences;
   now?: () => Date;
 };
 
@@ -184,6 +197,36 @@ export type IngestionOptions = {
   dryRun?: boolean;
   maxAgeDays?: number;
 };
+
+// ── Material-change detection ───────────────────
+
+/**
+ * Fields whose change affects eligibility or match scoring. Timestamp
+ * and provider-run metadata are deliberately absent.
+ */
+export const MATERIAL_FIELDS = [
+  "title",
+  "description",
+  "location",
+  "city",
+  "province",
+  "country",
+  "workplaceType",
+  "employmentType",
+  "seniority",
+  "locationPriority",
+  "acceptsCanadianApplicants",
+  "requiresUSResidency",
+  "requiresCitizenship",
+  "requiresSecurityClearance",
+] as const satisfies readonly (keyof PostingWriteFields)[];
+
+export function materialFieldsChanged(
+  current: Pick<PostingWriteFields, (typeof MATERIAL_FIELDS)[number]>,
+  next: Pick<PostingWriteFields, (typeof MATERIAL_FIELDS)[number]>
+): boolean {
+  return MATERIAL_FIELDS.some((f) => current[f] !== next[f]);
+}
 
 // ── Apply-link preference ───────────────────────
 
@@ -280,22 +323,30 @@ async function ingestOne(
   job: NormalizedJob,
   store: IngestionStore,
   dryRun: boolean,
-  now: Date
-): Promise<{ action: ItemAction; reason?: string; deactivated?: boolean }> {
+  now: Date,
+  prefs: JobPreferences
+): Promise<{
+  action: ItemAction;
+  reason?: string;
+  deactivated?: boolean;
+  /** Posting id when this item caused a material change. */
+  changedPostingId?: string;
+}> {
   // Idempotency: seen this exact source before → refresh & verify.
   const existing = await store.findSource(job.sourceType, job.sourceUrl);
   if (existing) {
-    const verdict = evaluateEligibility(job, { firstSeenAt: now, now });
+    const verdict = evaluateEligibility(job, { firstSeenAt: now, now, prefs });
+    let materialChanged = false;
     if (!dryRun) {
       await store.touchSource(existing.id, job.raw, now);
       // Refresh always writes current eligibility flags + priority, so
       // a retained-but-ineligible posting is flagged and hidden from
       // discovery (isDiscoverable / DISCOVERABLE_WHERE).
-      await store.refreshPosting(
+      ({ materialChanged } = await store.refreshPosting(
         existing.jobPostingId,
         postingFields(job, verdict.locationPriority),
         now
-      );
+      ));
     }
     if (!verdict.eligible) {
       // The posting turned ineligible (US-only, citizenship,
@@ -313,12 +364,16 @@ async function ingestOne(
         };
       }
     }
-    return { action: "updated" };
+    return {
+      action: "updated",
+      // Timestamp-only refreshes never trigger rescoring.
+      changedPostingId: materialChanged ? existing.jobPostingId : undefined,
+    };
   }
 
   // New source: gate on eligibility (seven-day window uses the
   // original source posting date; firstSeenAt is "now" for new jobs).
-  const verdict = evaluateEligibility(job, { firstSeenAt: now, now });
+  const verdict = evaluateEligibility(job, { firstSeenAt: now, now, prefs });
   if (!verdict.eligible) {
     return { action: "skipped", reason: verdict.reasons[0] ?? "Ineligible" };
   }
@@ -331,15 +386,18 @@ async function ingestOne(
   const duplicate = findDuplicate(toDedupCandidate(job), candidates);
   if (duplicate) {
     if (!dryRun) await store.attachSource(duplicate.id, sourceFields(job), now);
-    return { action: "merged" };
+    // A merge can change the preferred apply link / attached sources —
+    // rescore so the breakdown reflects the merged record.
+    return { action: "merged", changedPostingId: dryRun ? undefined : duplicate.id };
   }
 
   if (!dryRun) {
-    await store.createPosting(
+    const id = await store.createPosting(
       postingFields(job, verdict.locationPriority),
       sourceFields(job),
       now
     );
+    return { action: "created", changedPostingId: id };
   }
   return { action: "created" };
 }
@@ -350,7 +408,19 @@ async function runConfig(
   config: SourceConfigRecord,
   provider: JobSourceProvider,
   store: IngestionStore,
-  { dryRun, maxAgeDays, now }: { dryRun: boolean; maxAgeDays: number; now: Date }
+  {
+    dryRun,
+    maxAgeDays,
+    now,
+    prefs,
+    changed,
+  }: {
+    dryRun: boolean;
+    maxAgeDays: number;
+    now: Date;
+    prefs: JobPreferences;
+    changed: Set<string>;
+  }
 ): Promise<ConfigRunSummary> {
   const summary: ConfigRunSummary = {
     configId: config.id,
@@ -383,12 +453,9 @@ async function runConfig(
     for (const raw of raws) {
       try {
         const job = normalizeJob(raw);
-        const { action, reason, deactivated } = await ingestOne(
-          job,
-          store,
-          dryRun,
-          now
-        );
+        const { action, reason, deactivated, changedPostingId } =
+          await ingestOne(job, store, dryRun, now, prefs);
+        if (changedPostingId) changed.add(changedPostingId);
         if (action === "created") summary.created += 1;
         else if (action === "updated") summary.updated += 1;
         else if (action === "merged") summary.merged += 1;
@@ -447,11 +514,16 @@ export async function runIngestion(
     store,
     resolveProvider = getProvider,
     providerAllowed = isProviderAllowed,
+    preferences: prefs = DEFAULT_JOB_PREFERENCES,
     now: nowFn = () => new Date(),
   } = deps;
   const dryRun = options.dryRun ?? false;
-  const maxAgeDays = options.maxAgeDays ?? JOB_MAX_AGE_DAYS;
+  // Explicit option (e.g. --days for testing) wins; otherwise the
+  // user's preference, hard-capped at the seven-day rule.
+  const maxAgeDays =
+    options.maxAgeDays ?? Math.min(prefs.maxJobAgeDays, JOB_MAX_AGE_DAYS);
   const startedAt = nowFn();
+  const changed = new Set<string>();
 
   const configs = await store.listConfigs({
     sourceType: options.sourceType,
@@ -497,7 +569,13 @@ export async function runIngestion(
     }
 
     results.push(
-      await runConfig(config, provider, store, { dryRun, maxAgeDays, now })
+      await runConfig(config, provider, store, {
+        dryRun,
+        maxAgeDays,
+        now,
+        prefs,
+        changed,
+      })
     );
   }
 
@@ -517,6 +595,7 @@ export async function runIngestion(
     maxAgeDays,
     configs: results,
     archived,
+    changedPostingIds: [...changed],
   };
 }
 

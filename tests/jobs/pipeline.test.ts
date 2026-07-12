@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ImportRunStatus, JobSourceType } from "@prisma/client";
 import {
+  materialFieldsChanged,
   pickPreferredApplyLink,
   runIngestion,
   type DedupRecord,
@@ -112,7 +113,9 @@ class InMemoryStore implements IngestionStore {
   async refreshPosting(postingId: string, fields: PostingWriteFields, at: Date) {
     this.writes++;
     const p = this.postings.find((x) => x.id === postingId)!;
+    const materialChanged = materialFieldsChanged(p, fields);
     Object.assign(p, fields, { lastVerifiedAt: at });
+    return { materialChanged };
   }
 
   async findDedupCandidates(
@@ -290,8 +293,10 @@ describe("ingestion pipeline", () => {
     expect(store.sources).toHaveLength(2);
     expect(store.runs[0].finished).toBe(true);
     expect(store.runs[0].jobsCreated).toBe(2);
-    expect(store.postings[0].locationPriority).toBe(1); // Vancouver
+    expect(store.postings[0].locationPriority).toBe(3); // Vancouver on-site
     expect(store.postings[0].sourcePostedAt).toEqual(daysAgo(2));
+    // New postings are flagged for match scoring.
+    expect(summary.changedPostingIds).toHaveLength(2);
   });
 
   it("is idempotent: re-running updates timestamps without duplicating", async () => {
@@ -316,6 +321,50 @@ describe("ingestion pipeline", () => {
       before.getTime()
     );
     expect(store.sources[0].lastSeenAt).toEqual(secondNow);
+    // Timestamp-only refresh: no material change → no rescoring.
+    expect(summary.changedPostingIds).toHaveLength(0);
+  });
+
+  it("flags materially changed postings for rescoring, ignoring metadata-only refreshes", async () => {
+    const store = new InMemoryStore();
+    store.configs = [config("GREENHOUSE", "acme")];
+    const url = "https://g/1";
+    const first = await runIngestion(
+      {},
+      deps(store, {
+        GREENHOUSE: provider("GREENHOUSE", [
+          rawJob({ sourceType: "GREENHOUSE", sourceUrl: url }),
+        ]),
+      })
+    );
+    expect(first.changedPostingIds).toHaveLength(1);
+
+    // Same content again → timestamp-only refresh.
+    const second = await runIngestion(
+      {},
+      deps(store, {
+        GREENHOUSE: provider("GREENHOUSE", [
+          rawJob({ sourceType: "GREENHOUSE", sourceUrl: url }),
+        ]),
+      })
+    );
+    expect(second.changedPostingIds).toHaveLength(0);
+
+    // Description edited → material change → rescoring flagged.
+    const third = await runIngestion(
+      {},
+      deps(store, {
+        GREENHOUSE: provider("GREENHOUSE", [
+          rawJob({
+            sourceType: "GREENHOUSE",
+            sourceUrl: url,
+            descriptionText:
+              "Full-time permanent SOC role in Vancouver. Now with Microsoft Sentinel and KQL detection engineering.",
+          }),
+        ]),
+      })
+    );
+    expect(third.changedPostingIds).toEqual([store.postings[0].id]);
   });
 
   it("deduplicates the same vacancy across providers (one posting, two sources)", async () => {

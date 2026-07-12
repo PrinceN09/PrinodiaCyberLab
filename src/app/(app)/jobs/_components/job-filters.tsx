@@ -4,6 +4,12 @@ import { Search, SlidersHorizontal, X } from "lucide-react";
 import { Select } from "@/components/ui/input";
 import { JOB_MAX_AGE_DAYS } from "@/lib/jobs/eligibility";
 import {
+  JOB_ZONE_LABELS,
+  JOB_ZONES,
+  type JobZone,
+} from "@/lib/jobs/discovery";
+import { cn } from "@/lib/utils";
+import {
   EMPLOYMENT_META,
   SENIORITY_LABELS,
   SOURCE_LABELS,
@@ -12,6 +18,7 @@ import {
 
 export type FilterState = {
   q: string;
+  zone: string;
   workplace: string;
   employment: string;
   seniority: string;
@@ -24,6 +31,7 @@ export type FilterState = {
 
 export const DEFAULT_FILTERS: FilterState = {
   q: "",
+  zone: "",
   workplace: "",
   employment: "",
   seniority: "",
@@ -39,6 +47,7 @@ const PROVINCES = ["BC", "AB", "SK", "MB", "ON", "QC", "NS", "NB", "PE", "NL"];
 export function filtersToParams(f: FilterState, page: number): URLSearchParams {
   const params = new URLSearchParams();
   if (f.q) params.set("q", f.q);
+  if (f.zone) params.set("zone", f.zone);
   if (f.workplace) params.set("workplace", f.workplace);
   if (f.employment) params.set("employment", f.employment);
   if (f.seniority) params.set("seniority", f.seniority);
@@ -139,9 +148,9 @@ export function JobFilters({
         onChange={(e) => set("days", e.target.value)}
         className="!h-9 !text-xs"
       >
-        <option value="1">Posted: today</option>
-        <option value="3">Posted: 3 days</option>
-        <option value="7">Posted: 7 days</option>
+        <option value="1">Posted: last 24 hours</option>
+        <option value="3">Posted: last 3 days</option>
+        <option value="7">Posted: last 7 days</option>
       </Select>
       <div>
         <label htmlFor="jobs-salary-min" className="sr-only">
@@ -175,6 +184,30 @@ export function JobFilters({
 
   return (
     <div className="border border-cds-border bg-cds-layer p-4">
+      {/* Zone shortcuts — validated keys mapped to canonical
+          server-side filters (no eligibility logic in the client). */}
+      <div
+        role="group"
+        aria-label="Filter shortcuts"
+        className="mb-3 flex flex-wrap gap-1.5"
+      >
+        {JOB_ZONES.map((zone: JobZone) => (
+          <button
+            key={zone}
+            onClick={() => set("zone", filters.zone === zone ? "" : zone)}
+            aria-pressed={filters.zone === zone}
+            className={cn(
+              "border px-2.5 py-1.5 text-2xs font-medium transition-colors",
+              filters.zone === zone
+                ? "border-cds-blue bg-cds-blue/15 text-cds-link"
+                : "border-cds-border text-cds-text-secondary hover:bg-cds-layer-accent hover:text-cds-text"
+            )}
+          >
+            {JOB_ZONE_LABELS[zone]}
+          </button>
+        ))}
+      </div>
+
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
           <Search

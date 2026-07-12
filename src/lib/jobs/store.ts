@@ -6,6 +6,8 @@
 import type { ImportRunStatus, JobSourceType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  MATERIAL_FIELDS,
+  materialFieldsChanged,
   pickPreferredApplyLink,
   type DedupRecord,
   type IngestionStore,
@@ -109,11 +111,22 @@ export class PrismaIngestionStore implements IngestionStore {
     postingId: string,
     fields: PostingWriteFields,
     at: Date
-  ): Promise<void> {
+  ): Promise<{ materialChanged: boolean }> {
+    const current = await prisma.jobPosting.findUnique({
+      where: { id: postingId },
+      select: Object.fromEntries(MATERIAL_FIELDS.map((f) => [f, true])),
+    });
+    const materialChanged =
+      current !== null &&
+      materialFieldsChanged(
+        current as unknown as Parameters<typeof materialFieldsChanged>[0],
+        fields
+      );
     await prisma.jobPosting.update({
       where: { id: postingId },
       data: { ...fields, lastVerifiedAt: at },
     });
+    return { materialChanged };
   }
 
   async findDedupCandidates(

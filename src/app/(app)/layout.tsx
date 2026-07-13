@@ -10,13 +10,19 @@ export default async function AppLayout({
   const session = await getSessionUser();
 
   return (
-    <div className="flex h-screen overflow-hidden bg-cds-bg">
+    // Full-viewport shell. `h-dvh` tracks the *visible* viewport (mobile
+    // toolbars included) so the body never becomes a scroll container and
+    // the sidebar/topbar can't drift on scroll. `overflow-hidden` confines
+    // all vertical scrolling to <main>.
+    <div className="flex h-dvh overflow-hidden bg-cds-bg">
       <Sidebar
         user={session ? { name: session.name, role: session.role } : undefined}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Topbar />
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        {/* The ONLY vertical scroll container. `min-h-0` lets this flex
+            child shrink so overflow works instead of pushing the shell. */}
+        <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
   );

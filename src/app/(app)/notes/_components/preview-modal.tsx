@@ -82,8 +82,8 @@ export function PreviewModal({
         className={cn(
           "relative z-10 flex animate-fade-in flex-col border border-cds-border bg-cds-layer shadow-2xl print:h-auto print:w-full print:border-0 print:shadow-none",
           full
-            ? "h-[calc(100vh-2rem)] w-[calc(100vw-2rem)]"
-            : "h-[85vh] w-full max-w-4xl"
+            ? "h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)]"
+            : "h-[85dvh] w-full max-w-4xl"
         )}
       >
         <div className="flex items-center justify-between border-b border-cds-border px-6 py-3 print:hidden">

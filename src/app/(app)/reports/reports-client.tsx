@@ -159,7 +159,7 @@ export function ReportsClient({
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
+    <div className="flex h-[calc(100dvh-3.5rem)]">
       <div className="flex w-96 shrink-0 flex-col border-r border-cds-border bg-cds-bg">
         <div className="border-b border-cds-border p-4">
           <div className="mb-2 text-2xs font-semibold uppercase tracking-wider text-cds-helper">

@@ -61,7 +61,7 @@ export function CoverClient({ initial }: { initial: CoverLetter[] }) {
   }
 
   return (
-    <div className="flex h-[calc(100vh-8.5rem)]">
+    <div className="flex h-[calc(100dvh-8.5rem)]">
       <div className="flex w-64 shrink-0 flex-col border-r border-cds-border bg-cds-bg">
         <div className="border-b border-cds-border p-4">
           <Button variant="primary" className="w-full" onClick={create}>

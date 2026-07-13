@@ -72,7 +72,7 @@ export function DiagramsClient({
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
+    <div className="flex h-[calc(100dvh-3.5rem)]">
       <div className="flex w-72 shrink-0 flex-col border-r border-cds-border bg-cds-bg">
         <div className="border-b border-cds-border p-4">
           <Button variant="primary" className="w-full" onClick={create}>

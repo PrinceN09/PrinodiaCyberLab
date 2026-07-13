@@ -40,7 +40,7 @@ export function Sidebar({
   }
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r border-cds-border bg-cds-bg md:flex">
+    <aside className="relative z-30 hidden h-full w-64 shrink-0 flex-col border-r border-cds-border bg-cds-bg md:flex">
       <div className="flex h-14 items-center gap-2.5 border-b border-cds-border px-5">
         <div className="flex h-7 w-7 items-center justify-center bg-cds-blue">
           <ShieldHalf className="h-4 w-4 text-white" strokeWidth={2.25} />
@@ -50,7 +50,7 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-3">
+      <nav className="min-h-0 flex-1 overflow-y-auto py-3">
         {NAV.map((section) => {
           const Icon = section.icon;
 

@@ -89,7 +89,7 @@ export const NAV: NavSection[] = [
       { href: "/career/resume", label: "Resume Builder", icon: FileText },
       { href: "/career/linkedin", label: "LinkedIn Optimization", icon: Linkedin },
       { href: "/career/cover-letters", label: "Cover Letters", icon: Mail },
-      { href: "/career/jobs", label: "Job Tracker", icon: Briefcase },
+      { href: "/career/jobs", label: "Application Tracker", icon: Briefcase },
       { href: "/career/interview", label: "Interview Preparation", icon: MessagesSquare },
       { href: "/career/portfolio", label: "Portfolio", icon: FolderGit2 },
     ],

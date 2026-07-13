@@ -49,6 +49,10 @@ model User {
   cyberProjects    CybersecurityProject[]
   notifications    Notification[]
   notificationRules NotificationRule[]
+  applicationInterviews  ApplicationInterview[]
+  applicationAssessments ApplicationAssessment[]
+  applicationOffers      ApplicationOffer[]
+  applicationNotes       ApplicationNote[]
 }
 
 model Folder {
@@ -646,6 +650,70 @@ enum JobStatus {
   ARCHIVED
 }
 
+enum ApplicationSource {
+  DISCOVERY // created by saving a JobPosting
+  MANUAL // entered by hand
+}
+
+enum InterviewType {
+  RECRUITER_SCREEN
+  HR_INTERVIEW
+  HIRING_MANAGER
+  TECHNICAL_INTERVIEW
+  SOC_SCENARIO
+  BEHAVIOURAL
+  PANEL
+  EXECUTIVE
+  FINAL_INTERVIEW
+  OTHER
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
+enum AssessmentType {
+  TECHNICAL_TEST
+  CODING_TEST
+  CYBERSECURITY_LAB
+  SOC_INVESTIGATION
+  TAKE_HOME
+  PERSONALITY
+  COGNITIVE
+  BACKGROUND_CHECK
+  OTHER
+}
+
+enum AssessmentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  PASSED
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+enum OfferDecision {
+  PENDING
+  ACCEPTED
+  DECLINED
+  NEGOTIATING
+}
+
+enum ApplicationNoteCategory {
+  GENERAL
+  RECRUITER
+  INTERVIEW
+  TECHNICAL
+  FOLLOW_UP
+  SALARY
+  COMPANY_RESEARCH
+}
+
 model JobApplication {
   id            String    @id @default(cuid())
   company       String
@@ -654,41 +722,173 @@ model JobApplication {
   salary        String?
   url           String?
   status        JobStatus @default(SAVED)
+  source        ApplicationSource @default(DISCOVERY)
   appliedDate   DateTime?
   interviewDate DateTime?
   notes         String?
+  // Denormalized job metadata (esp. for MANUAL entries; discovered
+  // applications also read these from the linked jobPosting).
+  workplaceType WorkplaceType?
+  employmentType JobEmploymentType?
+  applicationUrl String?
+  matchScore    Int?
+  // Lifecycle timestamps
+  discoveredAt  DateTime?
+  savedAt       DateTime? @default(now())
+  lastActivityAt DateTime? @default(now())
   // Job-discovery integration (v0.4)
   jobPostingId  String?
   jobPosting    JobPosting?  @relation(fields: [jobPostingId], references: [id], onDelete: SetNull)
   resumeId      String?
   resume        Resume?      @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  resumeVersion String?
   coverLetterId String?
   coverLetter   CoverLetter? @relation(fields: [coverLetterId], references: [id], onDelete: SetNull)
+  coverLetterVersion String?
   contactPerson String?
   recruiter     String?
-  followUpDate  DateTime?
+  // Structured contacts
+  recruiterName    String?
+  recruiterTitle   String?
+  recruiterCompany String?
+  recruiterEmail   String?
+  recruiterPhone   String?
+  hiringManagerName  String?
+  hiringManagerEmail String?
+  contactNotes     String?
+  // Follow-up
+  followUpDate      DateTime?
+  followUpReason    String?
+  followUpCompleted Boolean  @default(false)
+  followUpNotes     String?
+  // Reopen bookkeeping — status a closed app returns to on reopen.
+  reopenedAt    DateTime?
   events        JobApplicationEvent[]
+  interviews    ApplicationInterview[]
+  assessments   ApplicationAssessment[]
+  offer         ApplicationOffer?
+  appNotes      ApplicationNote[]
   userId        String
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  @@unique([userId, jobPostingId])
   @@index([status])
   @@index([jobPostingId])
+  @@index([userId, status])
+  @@index([userId, followUpDate])
 }
 
 /// Activity timeline for an application (status changes, notes,
-/// interviews, follow-ups). Append-only.
+/// interviews, follow-ups). Append-only, auditable.
 model JobApplicationEvent {
   id            String         @id @default(cuid())
   applicationId String
   application   JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  kind          String // status_change | note | interview | follow_up | attachment | outcome
+  userId        String?
+  kind          String // see APPLICATION_EVENT_KINDS in lib/applications/timeline.ts
+  summary       String?
   note          String?
+  metadata      Json?
   occurredAt    DateTime       @default(now())
   createdAt     DateTime       @default(now())
 
   @@index([applicationId, occurredAt])
+}
+
+model ApplicationInterview {
+  id            String          @id @default(cuid())
+  applicationId String
+  application   JobApplication  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          InterviewType   @default(OTHER)
+  stage         String?
+  status        InterviewStatus @default(SCHEDULED)
+  scheduledAt   DateTime?
+  startTime     DateTime?
+  endTime       DateTime?
+  timezone      String?
+  interviewers  String[]        @default([])
+  locationOrLink String?
+  prepNotes     String?
+  questionsAsked String?
+  reflections   String?
+  technicalTopics String[]      @default([])
+  outcome       String?
+  followUpRequired Boolean      @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([applicationId])
+  @@index([userId])
+}
+
+model ApplicationAssessment {
+  id            String           @id @default(cuid())
+  applicationId String
+  application   JobApplication   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  type          AssessmentType   @default(OTHER)
+  provider      String?
+  receivedAt    DateTime?
+  dueDate       DateTime?
+  completedAt   DateTime?
+  status        AssessmentStatus @default(NOT_STARTED)
+  score         String?
+  result        String?
+  link          String?
+  notes         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([applicationId])
+  @@index([userId])
+}
+
+model ApplicationOffer {
+  id             String        @id @default(cuid())
+  applicationId  String        @unique
+  application    JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  receivedDate   DateTime?
+  positionTitle  String?
+  baseSalary     Float?
+  salaryCurrency String?       @default("CAD")
+  salaryPeriod   String?       @default("YEAR")
+  bonus          String?
+  equity         String?
+  vacationDays   Int?
+  benefitsNotes  String?
+  remotePolicy   String?
+  officeLocation String?
+  startDate      DateTime?
+  expiryDate     DateTime?
+  negotiationNotes String?
+  decision       OfferDecision @default(PENDING)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([userId])
+}
+
+model ApplicationNote {
+  id            String                  @id @default(cuid())
+  applicationId String
+  application   JobApplication          @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body          String
+  category      ApplicationNoteCategory @default(GENERAL)
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@index([applicationId])
+  @@index([userId])
 }
 
 model InterviewPrep {

@@ -88,7 +88,7 @@ export default async function SettingsPage() {
                 <Field label="Full name" value={user?.name ?? "Prince Ntunka"} />
                 <Field
                   label="Email"
-                  value={user?.email ?? "princentunka09@gmail.com"}
+                  value={user?.email ?? "you@example.com"}
                 />
                 <Field label="Role" value={user?.role ?? "SOC Analyst"} />
                 <Field label="Time zone" value="UTC+02:00" />

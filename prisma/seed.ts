@@ -1,13 +1,43 @@
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "../src/lib/password";
 
 const prisma = new PrismaClient();
 
-// Default demo credentials — change the password after first sign-in.
-const DEMO_PASSWORD = "CyberLab2026!";
+/**
+ * Local development admin credentials are read from the environment —
+ * they are NEVER hard-coded, printed, or committed. Set SEED_ADMIN_EMAIL
+ * and SEED_ADMIN_PASSWORD in your local .env before seeding.
+ */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 12;
+
+function readSeedAdminCredentials(): { email: string; password: string } {
+  const email = process.env.SEED_ADMIN_EMAIL?.trim();
+  const password = process.env.SEED_ADMIN_PASSWORD;
+
+  if (!email || !password) {
+    throw new Error(
+      "Seed admin credentials are not configured. Set SEED_ADMIN_EMAIL and " +
+        "SEED_ADMIN_PASSWORD in your local environment."
+    );
+  }
+  if (!EMAIL_RE.test(email)) {
+    // Never echo the value back in the error message.
+    throw new Error("SEED_ADMIN_EMAIL is not a valid email address.");
+  }
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(
+      `SEED_ADMIN_PASSWORD must be at least ${MIN_PASSWORD_LENGTH} characters for local development.`
+    );
+  }
+  return { email: email.toLowerCase(), password };
+}
 
 async function main() {
   console.log("Seeding Prinodia CyberLab…");
+
+  // Fail fast (and safely) if local admin credentials are not configured.
+  const adminCredentials = readSeedAdminCredentials();
 
   // Clean slate (order matters for relations)
   await prisma.studySession.deleteMany();
@@ -40,9 +70,9 @@ async function main() {
   const user = await prisma.user.create({
     data: {
       name: "Prince Ntunka",
-      email: "princentunka09@gmail.com",
+      email: adminCredentials.email,
       role: "SOC Analyst (in training)",
-      password: await bcrypt.hash(DEMO_PASSWORD, 10),
+      password: await hashPassword(adminCredentials.password),
     },
   });
 
@@ -706,7 +736,7 @@ Assign control owners and schedule a follow-up assessment in 60 days.`,
       content: {
         fullName: "Prince Ntunka",
         title: "SOC Analyst",
-        email: "princentunka09@gmail.com",
+        email: adminCredentials.email,
         location: "Remote",
         summary:
           "Aspiring SOC Analyst with hands-on experience in SIEM log analysis, threat detection, and incident response. Skilled with Splunk, Wireshark, and the MITRE ATT&CK framework through home-lab and TryHackMe projects.",
@@ -839,7 +869,8 @@ Prince Ntunka`,
   });
 
   console.log("Seed complete ✔");
-  console.log(`\nSign in with:\n  Email:    ${user.email}\n  Password: ${DEMO_PASSWORD}\n`);
+  // Never print the password, AUTH_SECRET, DATABASE_URL, or tokens.
+  console.log(`Development admin account created for ${user.email}`);
 }
 
 main()

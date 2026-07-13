@@ -58,7 +58,7 @@ export function ResumeClient({ initialResumes }: { initialResumes: Resume[] }) {
         content: {
           fullName: "Prince Ntunka",
           title: "SOC Analyst",
-          email: "princentunka09@gmail.com",
+          email: "you@example.com",
           location: "Remote",
           summary: "",
           skills: [],

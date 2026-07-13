@@ -1,13 +1,14 @@
 # Prinodia CyberLab
 
-> **A professional cybersecurity learning workspace for notes, code, diagrams, labs, and reports.**
+> **A professional cybersecurity learning workspace for notes, code, diagrams, labs, reports, and a personalized job-search engine.**
 
 Prinodia CyberLab is an enterprise-grade cybersecurity learning platform for
 students, SOC analysts, penetration testers, and security professionals. It
-combines a knowledge base, code workspace, diagram editor, project tracker, and
-reporting system into a single application — designed in the spirit of the
-**IBM Carbon Design System**: a restrained, high-contrast dark theme with IBM
-Blue accents, sharp cards, and precise typography.
+combines a knowledge base, code workspace, diagram editor, project tracker,
+reporting system, and a Canada-focused job-discovery engine into a single
+application — designed in the spirit of the **IBM Carbon Design System**: a
+restrained, high-contrast dark theme with IBM Blue accents, sharp cards, and
+precise typography.
 
 ---
 
@@ -31,7 +32,7 @@ active section stays open as you navigate.
 - **Notes / Wiki** — three-pane layout (list · Markdown editor · live preview), editable titles, autosave, search, tags, folders, pinned & recent notes, version-history entry point.
 - **Code Workspace** — Monaco editor (theme-aware) for Python, Bash, PowerShell, SQL, JS/TS, YAML, JSON, Markdown, and more.
 - **Diagram Studio** — Mermaid.js with live, theme-aware rendering for flowcharts, sequence diagrams, and attack paths.
-- **Course Library** — track structured courses (e.g. 10Alytics) by module and lesson, with notes linkable to lessons.
+- **Course Library** — track structured courses by module and lesson, with notes linkable to lessons.
 - **Study Sessions** — log focused sessions with duration, focus area, and course link.
 - **Flashcards** — active-recall study mode with decks and confidence rating.
 - **Resources** — courses, certs, books, labs, and tools.
@@ -47,9 +48,35 @@ active section stays open as you navigate.
 - **Resume Builder** — role-targeted, export-ready resumes (print/PDF), multiple resumes.
 - **LinkedIn Optimization** — headline/about/skills/featured editor with an optimization checklist.
 - **Cover Letters** — per-application drafts with live preview.
-- **Job Tracker** — Kanban board (Saved → Applied → Interview → Offer → Rejected) built for hiring.cafe.
+- **Application Tracker** — track roles from Saved through Offer with status, notes, and follow-ups.
 - **Interview Preparation** — personal question bank with confidence ratings.
 - **Portfolio** — showcase labs, detections, and write-ups.
+
+**Job Discovery**
+
+A Canada-focused discovery engine that ingests roles, normalizes them, and scores
+them against your profile:
+
+- **Provider architecture** — official **Greenhouse** and **Lever** job-board
+  providers. Unofficial/experimental providers (e.g. Hiring.cafe, Workday) are
+  **disabled by default** behind environment flags because they use undocumented
+  endpoints; they are not integrated in production.
+- **7-day freshness** — only roles posted within the last 7 days are surfaced.
+- **Canada eligibility & relocation** — a canonical, server-side eligibility model
+  covering Remote Canada, Vancouver / BC, Canada-wide on-site/hybrid with
+  relocation, and Remote US/Canada roles that explicitly accept Canadian
+  applicants. US-only and ambiguous-eligibility roles are excluded.
+- **Normalization & deduplication** — postings are normalized into a common shape
+  and de-duplicated across providers.
+- **Personalized preferences** — per-user, environment-independent job-search
+  preferences (home location, relocation, workplace types, employment type, max
+  job age, workplace priority order) drive eligibility and ranking.
+- **Transparent match scoring** — a 0–100 score with a full, explainable component
+  breakdown (skills, title, experience, location, projects, tools, certifications)
+  and honest geographic/legal hard gates.
+- **Skill-gap analysis** — highlights missing required skills and low-confidence
+  matches to guide your next lab or project.
+- **Discovery dashboard** — filter and sort roles with saved-view shortcuts.
 
 **Progress**
 - **Learning Progress**, **Study Hours** (schedule adherence + streaks), **Goals**, **Weekly Review**.
@@ -67,9 +94,11 @@ active section stays open as you navigate.
 | Styling | Tailwind CSS (Carbon-inspired design tokens) |
 | Database | PostgreSQL |
 | ORM | Prisma |
+| Auth | Signed JWT session cookies (`jose`), bcrypt password hashing |
 | Editors | Monaco Editor, Markdown (react-markdown), Mermaid.js |
 | Icons | Lucide |
 | Fonts | IBM Plex Sans / IBM Plex Mono |
+| Testing | Vitest |
 
 ---
 
@@ -82,17 +111,7 @@ active section stays open as you navigate.
 
 ## Getting started
 
-Run these from the project root
-(`PrinodiaCyberLab`).
-
-### 0. Clean any partial dependencies (first setup only)
-
-A partial `node_modules` may exist from scaffolding. Remove it for a clean,
-correct-architecture install:
-
-```bash
-rm -rf node_modules package-lock.json
-```
+Run all commands from the project root.
 
 ### 1. Install dependencies
 
@@ -100,57 +119,51 @@ rm -rf node_modules package-lock.json
 npm install
 ```
 
-### 2. Configure the database connection & auth secret
+### 2. Configure environment variables
 
-Open **`.env`** and set `DATABASE_URL` to your local PostgreSQL user/password,
-and set a long random `AUTH_SECRET` used to sign session cookies:
+Copy the example file and fill in **your own local values** — never commit `.env`:
 
-```env
-DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/prinodia_cyberlab?schema=public"
-AUTH_SECRET="a-long-random-string"
+```bash
+cp .env.example .env
 ```
 
-> The `prinodia_cyberlab` database must already exist. Create it if needed:
-> `createdb prinodia_cyberlab`
+At minimum, set:
+
+- `DATABASE_URL` — your local PostgreSQL connection string.
+- `AUTH_SECRET` — a long random value used to sign session cookies
+  (`openssl rand -hex 32`).
+- `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` — the local admin account the seed
+  creates (see below). Use a strong, unique development password.
+
+See `.env.example` for the full list and comments. The `prinodia_cyberlab`
+database must already exist — create it with `createdb prinodia_cyberlab` if
+needed.
 
 ### 3. Generate the Prisma client & run the migration
 
 ```bash
 npx prisma generate
-npx prisma migrate dev --name init
+npx prisma migrate dev
 ```
 
-> The schema was significantly expanded (Career Center, Courses, Study Sessions,
-> Flashcards, SIEM Rules, Threat Hunts, IOCs, and more). If you already ran an
-> earlier version, this simply creates a new migration — run the same command and
-> give it a name like `expanded_modules` when prompted. `prisma generate` is also
-> required after pulling schema changes so the client picks up the new models.
+`prisma generate` is required after pulling schema changes so the client picks up
+new models.
 
-### 4. Seed realistic cybersecurity data
+### 4. Seed sample data
 
 ```bash
 npm run db:seed
 ```
 
-Loads sample notes (MITRE ATT&CK, Windows event IDs, NIST IR lifecycle), code
-snippets (Splunk detections, Sigma rules, triage scripts), diagrams (SOC triage
-flow, kill chain), eight projects, three reports, a SOC Analyst learning track,
-resources, and a week of study logs — plus the demo user account.
+Loads sample notes, code snippets, diagrams, projects, reports, a learning track,
+resources, and study logs — owned by a local development admin account.
 
-The seed prints your sign-in credentials at the end:
-
-```
-Email:    prenodiacyber@gmail.com
-Password: example!212
-```
-
-## Authentication
-
-The app is gated behind a sign-in screen (`/login`). Sessions are signed JWTs
-stored in an httpOnly cookie; passwords are hashed with bcrypt. Middleware
-redirects unauthenticated requests to `/login` and signed-in users away from the
-auth pages. Sign out from the button in the sidebar footer. Change the demo
-password after your first sign-in.
+**Authentication credentials for local development are configured through
+environment variables.** The seed process reads `SEED_ADMIN_EMAIL` and
+`SEED_ADMIN_PASSWORD` from the local environment, validates them, hashes the
+password before persistence, and never stores plaintext credentials in the
+repository. It prints only a confirmation line (the account email) — never the
+password.
 
 ### 5. Run the app
 
@@ -158,7 +171,20 @@ password after your first sign-in.
 npm run dev
 ```
 
-Open **http://localhost:3000**.
+Open **http://localhost:3000** and sign in with the `SEED_ADMIN_EMAIL` /
+`SEED_ADMIN_PASSWORD` you configured in `.env`.
+
+---
+
+## Authentication
+
+The app is gated behind a sign-in screen (`/login`). Sessions are signed JWTs
+(`jose`, HS256) stored in an **httpOnly** cookie, marked **secure** in production
+with **SameSite=Lax**. The signing secret is read from `AUTH_SECRET` in the
+environment — there is no hard-coded fallback secret. Passwords are hashed with
+**bcrypt**; login responses return a user profile only and never include the
+password hash. Middleware redirects unauthenticated requests to `/login` and
+signed-in users away from the auth pages.
 
 ---
 
@@ -169,18 +195,11 @@ Open **http://localhost:3000**.
 | `npm run dev` | Start the dev server |
 | `npm run build` | Production build |
 | `npm run start` | Run the production build |
+| `npm test` | Run the Vitest suite |
 | `npm run db:migrate` | Create/apply a migration |
-| `npm run db:seed` | Seed sample data |
+| `npm run db:seed` | Seed sample data (requires `SEED_ADMIN_*`) |
 | `npm run db:studio` | Open Prisma Studio to browse data |
-
----
-
-## Files you may need to edit manually
-
-1. **`.env`** — set your real `DATABASE_URL` and a random `AUTH_SECRET`. This is
-   the **only** file that must be edited before the app will run.
-
-Everything else works out of the box.
+| `npm run jobs:ingest` | Run the job-discovery ingestion pipeline |
 
 ---
 
@@ -189,31 +208,35 @@ Everything else works out of the box.
 ```text
 PrinodiaCyberLab/
 ├── prisma/
-│   ├── schema.prisma        # User, Note, Folder, CodeSnippet, Diagram,
-│   │                        # Project, Report, LearningProgress, Resource, Tag
-│   └── seed.ts              # Realistic cybersecurity seed data
+│   ├── schema.prisma        # Data model (users, learning, ops, career, jobs)
+│   ├── migrations/          # Versioned SQL migrations
+│   └── seed.ts              # Sample data (env-configured admin owner)
 ├── src/
 │   ├── app/
-│   │   ├── layout.tsx       # App shell (sidebar + topbar)
-│   │   ├── page.tsx         # Dashboard
-│   │   ├── notes/           # Notes / Wiki
-│   │   ├── code/            # Code Workspace (Monaco)
-│   │   ├── diagrams/        # Diagrams (Mermaid)
-│   │   ├── projects/        # Cyber Projects board
-│   │   ├── reports/         # Reports (IR / Vuln / GRC / Threat Intel)
-│   │   ├── progress/        # Learning Progress
-│   │   ├── resources/       # Resources library
-│   │   ├── settings/        # Settings
-│   │   └── api/             # REST routes for CRUD
-│   ├── components/
-│   │   ├── shell/           # Sidebar, Topbar
-│   │   ├── ui/              # Card, Badge, Button, Progress, PageHeader
-│   │   ├── markdown.tsx     # Markdown renderer
-│   │   └── mermaid.tsx      # Mermaid renderer
-│   └── lib/                 # prisma client, utils, constants
+│   │   ├── (app)/           # Authenticated workspace (dashboard, career, etc.)
+│   │   ├── (auth)/          # Login / auth pages
+│   │   └── api/             # REST routes for CRUD, jobs, applications, auth
+│   ├── components/          # Shell, UI primitives, markdown & mermaid renderers
+│   └── lib/                 # prisma client, auth/session, jobs & applications logic
+├── tests/                   # Vitest unit/integration tests
 ├── tailwind.config.ts       # Carbon-inspired design tokens
-└── .env                     # DATABASE_URL (edit this)
+└── .env.example             # Placeholder environment configuration
 ```
+
+---
+
+## Security
+
+- **Secrets live only in `.env`**, which is gitignored. `.env.example` contains
+  placeholders only.
+- **Never commit `.env` files, tokens, passwords, private keys, or production
+  database credentials.**
+- Generate every secret (`AUTH_SECRET`, `JOBS_REFRESH_SECRET`, database password)
+  locally, and do not reuse development credentials in production.
+- The seed never prints or stores plaintext passwords; authentication secrets are
+  read from the environment.
+- Provider/API tokens (e.g. `GITHUB_TOKEN`) are used server-side only and are
+  never exposed to the browser or returned from API responses.
 
 ---
 
@@ -224,14 +247,6 @@ canvas, `#1f1f1f` layers, IBM Blue (`#0f62fe`) as the single interactive accent,
 2px focus rings, sharp (zero-radius) corners, and IBM Plex typography. Support
 colors (red/orange/yellow/green) are reserved for severity and status — never
 decoration.
-
----
-
-## Roadmap
-
-**v2** — authentication, full-text search, file uploads, light theme.
-**v3** — AI learning assistant, interactive labs, flashcards, quiz engine.
-**v4** — team collaboration, shared workspaces, comments, real-time editing.
 
 ---
 

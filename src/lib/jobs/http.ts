@@ -23,7 +23,7 @@ export class HttpError extends Error {
 }
 
 const USER_AGENT =
-  "PrinodiaCyberLab-JobDiscovery/0.4 (personal job dashboard; contact: princentunka09@gmail.com)";
+  "PrinodiaCyberLab-JobDiscovery/0.4 (personal job dashboard)";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_RETRIES = 3;

@@ -24,9 +24,9 @@ step "Checking .env"
 if [ ! -f .env ]; then
   if [ -f .env.example ]; then
     cp .env.example .env
-    warn "Created .env from .env.example — edit DATABASE_URL and AUTH_SECRET before continuing."
+    warn "Created .env from .env.example — edit DATABASE_URL, AUTH_SECRET, and the SEED_ADMIN_* values before continuing."
   else
-    echo "No .env or .env.example found. Create a .env with DATABASE_URL and AUTH_SECRET."; exit 1
+    echo "No .env or .env.example found. Create a .env with DATABASE_URL, AUTH_SECRET, and SEED_ADMIN_* values."; exit 1
   fi
 fi
 grep -q "AUTH_SECRET" .env || {
@@ -56,7 +56,14 @@ npx prisma migrate dev --name init || {
 ok "Database schema is up to date"
 
 # ── 5. Seed data + login account ──────────────────────────
-step "Seeding data and creating your login account"
+step "Seeding data and creating your local admin account"
+# The seed reads SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD from the environment.
+# It never prints or stores plaintext credentials. Configure them in .env first.
+if ! grep -qE '^SEED_ADMIN_EMAIL=.+' .env || ! grep -qE '^SEED_ADMIN_PASSWORD=.+' .env; then
+  warn "SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD must be set in .env before seeding."
+  warn "Set both (use a strong, unique local development password) and re-run ./setup.sh."
+  exit 1
+fi
 npm run db:seed
 ok "Seed complete"
 
@@ -64,5 +71,5 @@ ok "Seed complete"
 step "Starting the app"
 printf "\n${GREEN}Prinodia CyberLab is starting.${NC}\n"
 printf "Open ${BLUE}http://localhost:3000${NC} (redirects to /login)\n\n"
-printf "Sign in with:\n  Email:    princentunka09@gmail.com\n  Password: CyberLab2026!\n\n"
+printf "Sign in with the SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD you configured in .env.\n\n"
 npm run dev

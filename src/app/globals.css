@@ -267,6 +267,31 @@ body {
   margin: 1rem 0 0.5rem;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Sidebar show / hide
+   Driven by the `data-sidebar-hidden` attribute that the pre-paint
+   `sidebarScript` sets on <html>, so the correct layout paints before
+   React hydrates (no flash). The transitions themselves live on the
+   elements (Tailwind classes) and respect prefers-reduced-motion.
+   ───────────────────────────────────────────────────────────── */
+[data-sidebar] {
+  margin-left: 0;
+}
+[data-sidebar-hidden="true"] [data-sidebar] {
+  /* Pull the entire sidebar off-screen to the left and reclaim its
+     flex space so the workspace expands to full width. */
+  margin-left: -16rem;
+}
+
+/* Circular toggle: centered on the 16rem divider when open, pinned to
+   the far-left workspace edge when hidden. */
+[data-sidebar-toggle] {
+  left: calc(16rem - 0.875rem);
+}
+[data-sidebar-hidden="true"] [data-sidebar-toggle] {
+  left: 0.5rem;
+}
+
 /* PDF export: print only the preview modal's content. */
 @media print {
   body * {

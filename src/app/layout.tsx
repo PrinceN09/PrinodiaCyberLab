@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider, themeScript } from "@/components/theme/theme-provider";
+import { sidebarScript } from "@/components/shell/sidebar-context";
 
 const plexSans = IBM_Plex_Sans({
   subsets: ["latin"],
@@ -41,6 +42,7 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: sidebarScript }} />
       </head>
       <body className="font-sans">
         <ThemeProvider>{children}</ThemeProvider>
